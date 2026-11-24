@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "ARPE Fiscalização",
+    "slug": "arpe-relatorios-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "arpe-fiscalizacao",
+    "android": {
+      "package": "br.gov.pe.arpe.fiscalizacao",
+      "adaptiveIcon": {
+        "backgroundColor": "#071d36"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita o acesso à câmera para registrar evidências fotográficas das vistorias da ARPE."
+        }
+      ],
+      "expo-asset"
+    ]
+  }
+}

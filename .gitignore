@@ -1,0 +1,37 @@
+# Dependências
+node_modules/
+
+# Expo / Metro
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Variáveis de ambiente e segredos (NUNCA versionar)
+.env
+.env.local
+.env.*.local
+
+# Android nativo / logs
+android/
+ios/
+teste.apk/
+*.apk
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+.DS_Store
+Thumbs.db
+
+# Agentes IA / Skills locais
+.agents/
+__pycache__/
+*.pyc
+
