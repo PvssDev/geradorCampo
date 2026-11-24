@@ -3,6 +3,19 @@ export type CategoriaRelatorio = "Fiscalização" | "Monitoramento";
 export type SituacaoNC = "Pendente" | "Parcialmente Sanada" | "Sanada";
 export type TipoAchado = "NC" | "PA";
 export type SyncStatus = "synced" | "pending" | "uploading" | "error";
+export type SessionLifecycleStatus = "em_aberto" | "finalizada";
+export type NetworkMode = "online" | "disconnected" | "offline_manual";
+
+export interface RelacionamentoOcorrenciaEntity {
+  readonly sigla: TipoAchado;
+  readonly siglas?: readonly string[];
+  readonly faixa?: string;
+  readonly setorPredial?: string;
+  readonly codificacao?: string;
+  readonly fotoRelacionadaNome?: string;
+  readonly registroReferenciaNumero?: number;
+  readonly criadoEm: string;
+}
 
 export interface FiscalizacaoEntity {
   readonly idFiscalizacao: string;
@@ -46,12 +59,15 @@ export interface OcorrenciaEntity {
   readonly fotoAtualNome?: string;
   readonly fotoAnteriorRef?: string;
   readonly legendaAnterior?: string;
+  readonly relacionamento?: RelacionamentoOcorrenciaEntity;
 }
 
 export interface VistoriaSessionEntity {
   readonly id: string;
   readonly tipoRelatorio: TipoRelatorio;
   readonly categoriaRelatorio: CategoriaRelatorio;
+  readonly lifecycleStatus: SessionLifecycleStatus;
+  readonly syncStandby: boolean;
   readonly fiscalizacao: FiscalizacaoEntity;
   readonly ocorrencias: readonly OcorrenciaEntity[];
   readonly fotos: readonly FotoMidiaEntity[];
@@ -60,4 +76,3 @@ export interface VistoriaSessionEntity {
   readonly fotosEnviadas: number;
   readonly atualizadaEm: string;
 }
-

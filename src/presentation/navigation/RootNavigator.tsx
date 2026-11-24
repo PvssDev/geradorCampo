@@ -1,56 +1,77 @@
-import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  CheckCircle2,
   ClipboardList,
-  CloudUpload,
   Home,
+  Images,
   Settings,
 } from "lucide-react-native";
 import { useMobileStore } from "../../application/store/useMobileStore";
 import { ARPE_COLORS, getConcessionTheme } from "../theme/colors";
-import { TOUCH_TARGET_MIN } from "../theme/tokens";
+import { RADII, SPACING, TOUCH_TARGET_MIN } from "../theme/tokens";
+import { InicioWizardScreen } from "../screens/InicioWizardScreen";
 import { HomeVistoriasScreen } from "../screens/HomeVistoriasScreen";
-import { VistoriaWorkspaceScreen } from "../screens/VistoriaWorkspaceScreen";
-import { NovaVistoriaScreen } from "../screens/NovaVistoriaScreen";
-import { NovaOcorrenciaScreen } from "../screens/NovaOcorrenciaScreen";
 import { SyncQueueScreen } from "../screens/SyncQueueScreen";
 import { AjustesScreen } from "../screens/AjustesScreen";
+import {
+  FLUID_EASE,
+  NATIVE_DRIVER,
+  TabFadeView,
+  useAnimatedColor,
+} from "../components/common/MotionPrimitives";
 
-type BottomTabKey = "inicio" | "coleta" | "sync" | "ajustes";
-type OverlayScreen = "none" | "nova_vistoria" | "nova_ocorrencia";
+type BottomTabKey =
+  | "inicio"
+  | "vistorias"
+  | "galeria"
+  | "finalizados"
+  | "configuracao";
+
+const TAB_ORDER: readonly BottomTabKey[] = [
+  "inicio",
+  "vistorias",
+  "galeria",
+  "finalizados",
+  "configuracao",
+];
 
 export const RootNavigator: React.FC = () => {
-  const { tipoRelatorio, categoriaRelatorio, vistorias } = useMobileStore();
+  const {
+    tipoRelatorio,
+    categoriaRelatorio,
+    vistorias,
+    retomarVistoriaNoWizard,
+    iniciarNovoRelatorioWizard,
+  } = useMobileStore();
   const [activeTab, setActiveTab] = useState<BottomTabKey>("inicio");
-  const [overlay, setOverlay] = useState<OverlayScreen>("none");
+  const [barWidth, setBarWidth] = useState(0);
+
+  const activeIndex = TAB_ORDER.indexOf(activeTab);
+  const indicatorIndex = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(indicatorIndex, {
+      toValue: activeIndex,
+      duration: 240,
+      easing: FLUID_EASE,
+      useNativeDriver: NATIVE_DRIVER,
+    }).start();
+  }, [activeIndex, indicatorIndex]);
 
   const theme = getConcessionTheme(tipoRelatorio, categoriaRelatorio);
-  const pendingCount = vistorias.filter((v) => v.syncStatus !== "synced").length;
-
-  if (overlay === "nova_vistoria") {
-    return (
-      <NovaVistoriaScreen
-        onBack={() => setOverlay("none")}
-        onCreated={() => {
-          setOverlay("none");
-          setActiveTab("coleta");
-        }}
-      />
-    );
-  }
-
-  if (overlay === "nova_ocorrencia") {
-    return (
-      <NovaOcorrenciaScreen
-        onBack={() => setOverlay("none")}
-        onSaved={() => {
-          setOverlay("none");
-          setActiveTab("coleta");
-        }}
-      />
-    );
-  }
+  const animatedPrimary = useAnimatedColor(theme.primary);
+  const abertasCount = vistorias.filter(
+    (v) => v.lifecycleStatus === "em_aberto"
+  ).length;
+  const finalizadasPendentesCount = vistorias.filter(
+    (v) => v.lifecycleStatus === "finalizada" && v.syncStatus !== "synced"
+  ).length;
+  const totalFotosLocais = vistorias.reduce(
+    (acc, v) => acc + v.fotos.length,
+    0
+  );
 
   const tabs: readonly {
     key: BottomTabKey;
@@ -59,39 +80,97 @@ export const RootNavigator: React.FC = () => {
     badge?: number;
   }[] = [
     { key: "inicio", label: "Início", icon: Home },
-    { key: "coleta", label: "Coleta", icon: ClipboardList },
     {
-      key: "sync",
-      label: "Sincronizar",
-      icon: CloudUpload,
-      badge: pendingCount > 0 ? pendingCount : undefined,
+      key: "vistorias",
+      label: "Vistorias",
+      icon: ClipboardList,
+      badge: abertasCount > 0 ? abertasCount : undefined,
     },
-    { key: "ajustes", label: "Ajustes", icon: Settings },
+    { key: "galeria", label: "Galeria", icon: Images },
+    {
+      key: "finalizados",
+      label: "Finalizados",
+      icon: CheckCircle2,
+      badge:
+        finalizadasPendentesCount > 0 ? finalizadasPendentesCount : undefined,
+    },
+    { key: "configuracao", label: "Configuração", icon: Settings },
   ];
+
+  const tabSlotWidth = barWidth > 0 ? (barWidth - 8) / tabs.length : 0;
+  const indicatorTranslateX =
+    tabSlotWidth > 0
+      ? indicatorIndex.interpolate({
+          inputRange: [0, tabs.length - 1],
+          outputRange: [
+            4 + tabSlotWidth * 0.22,
+            4 + tabSlotWidth * (tabs.length - 1) + tabSlotWidth * 0.22,
+          ],
+        })
+      : 0;
 
   return (
     <View style={styles.root}>
-      <View style={styles.screenContainer}>
+      {/* Fade sutil e instantâneo entre as 5 abas (sem slide pesado) */}
+      <TabFadeView animKey={activeTab} style={styles.screenContainer}>
         {activeTab === "inicio" && (
-          <HomeVistoriasScreen
-            onOpenVistoria={() => setActiveTab("coleta")}
-            onNovaVistoria={() => setOverlay("nova_vistoria")}
+          <InicioWizardScreen
+            onFinalizadoSuccess={() => setActiveTab("finalizados")}
           />
         )}
-        {activeTab === "coleta" && (
-          <VistoriaWorkspaceScreen
-            onBack={() => setActiveTab("inicio")}
-            onNovaOcorrencia={() => setOverlay("nova_ocorrencia")}
-            onGoToSync={() => setActiveTab("sync")}
-          />
-        )}
-        {activeTab === "sync" && <SyncQueueScreen />}
-        {activeTab === "ajustes" && <AjustesScreen />}
-      </View>
 
-      {/* Bottom Tab Bar Limpa — 4 ícones na base como na referência mobile */}
+        {activeTab === "vistorias" && (
+          <HomeVistoriasScreen
+            onOpenVistoria={(vistoriaId) => {
+              retomarVistoriaNoWizard(vistoriaId);
+              setActiveTab("inicio");
+            }}
+            onNovaVistoria={() => {
+              iniciarNovoRelatorioWizard();
+              setActiveTab("inicio");
+            }}
+          />
+        )}
+
+        {activeTab === "galeria" && (
+          <SafeAreaView style={styles.placeholderSafe} edges={["top"]}>
+            <View style={styles.placeholderCard}>
+              <Images size={28} color={theme.primary} />
+              <Text style={styles.placeholderTitle}>Galeria Local</Text>
+              <Text style={styles.placeholderSubtitle}>
+                {totalFotosLocais} foto(s) salvas localmente nas sessões atuais. A grade por cores, filtro por sessão e compartilhamento serão implementados na Parte 3 da Ordem de Execução.
+              </Text>
+            </View>
+          </SafeAreaView>
+        )}
+
+        {activeTab === "finalizados" && <SyncQueueScreen />}
+        {activeTab === "configuracao" && <AjustesScreen />}
+      </TabFadeView>
+
+      {/* Bottom Tab Bar Limpa com indicador deslizante suave */}
       <SafeAreaView edges={["bottom"]} style={styles.tabBarSafe}>
-        <View style={styles.tabBar}>
+        <View
+          style={styles.tabBar}
+          onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+        >
+          {tabSlotWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.slidingIndicator,
+                {
+                  width: tabSlotWidth * 0.56,
+                  transform: [{ translateX: indicatorTranslateX }],
+                },
+              ]}
+            >
+              <Animated.View
+                style={[StyleSheet.absoluteFill, { backgroundColor: animatedPrimary }]}
+              />
+            </Animated.View>
+          )}
+
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
@@ -107,7 +186,11 @@ export const RootNavigator: React.FC = () => {
                 accessibilityLabel={tab.label}
               >
                 <View style={styles.iconWrapper}>
-                  <Icon size={22} color={iconColor} strokeWidth={isActive ? 2.4 : 2} />
+                  <Icon
+                    size={21}
+                    color={iconColor}
+                    strokeWidth={isActive ? 2.4 : 2}
+                  />
                   {tab.badge !== undefined && (
                     <View
                       style={[
@@ -124,6 +207,7 @@ export const RootNavigator: React.FC = () => {
                     styles.tabLabel,
                     { color: iconColor, fontWeight: isActive ? "700" : "500" },
                   ]}
+                  numberOfLines={1}
                 >
                   {tab.label}
                 </Text>
@@ -144,17 +228,55 @@ const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
   },
+  placeholderSafe: {
+    flex: 1,
+    backgroundColor: ARPE_COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: SPACING.xl,
+  },
+  placeholderCard: {
+    width: "100%",
+    maxWidth: 420,
+    padding: SPACING.xl,
+    borderRadius: RADII.xl,
+    borderWidth: 1,
+    borderColor: ARPE_COLORS.border,
+    backgroundColor: ARPE_COLORS.surfaceMuted,
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  placeholderTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: ARPE_COLORS.textPrimary,
+  },
+  placeholderSubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    color: ARPE_COLORS.textSecondary,
+  },
   tabBarSafe: {
     backgroundColor: ARPE_COLORS.white,
     borderTopWidth: 1,
     borderTopColor: ARPE_COLORS.border,
   },
   tabBar: {
+    position: "relative",
     flexDirection: "row",
     height: 62,
     alignItems: "center",
     justifyContent: "space-around",
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
+  },
+  slidingIndicator: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    height: 2.5,
+    borderBottomLeftRadius: RADII.pill,
+    borderBottomRightRadius: RADII.pill,
   },
   tabItem: {
     flex: 1,
@@ -183,7 +305,6 @@ const styles = StyleSheet.create({
     color: ARPE_COLORS.white,
   },
   tabLabel: {
-    fontSize: 10.5,
+    fontSize: 10,
   },
 });
-
