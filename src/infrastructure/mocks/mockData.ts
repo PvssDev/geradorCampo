@@ -5,6 +5,8 @@ export const MOCK_VISTORIAS: readonly VistoriaSessionEntity[] = [
     id: "v-cra-fisc-001",
     tipoRelatorio: "CRA",
     categoriaRelatorio: "Fiscalização",
+    lifecycleStatus: "em_aberto",
+    syncStandby: false,
     fiscalizacao: {
       idFiscalizacao: "FISC-CRA-2026-001",
       data: "23/11/2026",
@@ -87,6 +89,8 @@ export const MOCK_VISTORIAS: readonly VistoriaSessionEntity[] = [
     id: "v-soc-mon-002",
     tipoRelatorio: "SOCICAM",
     categoriaRelatorio: "Monitoramento",
+    lifecycleStatus: "em_aberto",
+    syncStandby: false,
     fiscalizacao: {
       idFiscalizacao: "MON-SOCICAM-2026-002",
       data: "23/11/2026",
@@ -194,6 +198,8 @@ export const MOCK_VISTORIAS: readonly VistoriaSessionEntity[] = [
     id: "v-crc-mon-001",
     tipoRelatorio: "CRC",
     categoriaRelatorio: "Monitoramento",
+    lifecycleStatus: "finalizada",
+    syncStandby: false,
     fiscalizacao: {
       idFiscalizacao: "MON-CRC-2026-001",
       data: "21/11/2026",
