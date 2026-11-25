@@ -6,15 +6,25 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "arpe-fiscalizacao",
+    "icon": "./assets/logo/logo_icone.png",
+    "splash": {
+      "image": "./assets/logo/logo_inteira.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "android": {
       "package": "br.gov.pe.arpe.fiscalizacao",
       "adaptiveIcon": {
-        "backgroundColor": "#071d36"
+        "foregroundImage": "./assets/logo/logo_icone.png",
+        "backgroundColor": "#ffffff"
       },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_NETWORK_STATE"
       ]
+    },
+    "web": {
+      "favicon": "./assets/logo/logo_icone.png"
     },
     "plugins": [
       "expo-sqlite",

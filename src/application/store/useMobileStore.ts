@@ -3,6 +3,7 @@ import { CONCESSION_CONFIG } from "../../domain/config/concessionConfig";
 import {
   CategoriaRelatorio,
   FotoMidiaEntity,
+  GaleriaFotoEntity,
   NetworkMode,
   OcorrenciaEntity,
   TipoAchado,
@@ -10,10 +11,20 @@ import {
   VistoriaSessionEntity,
 } from "../../domain/entities/types";
 import {
+  aplicarEdicaoRelacionamento,
   construirRelacionamentoValidado,
+  criarFotoGaleriaDeVistoria,
+  desvincularFotosDeVistorias,
+  FotoOcorrenciaAlvo,
   podeAutoSincronizar,
+  removerFotoDeOcorrencia,
 } from "../../domain/rules/domainRules";
 import { MOCK_VISTORIAS } from "../../infrastructure/mocks/mockData";
+
+const INITIAL_GALERIA_FOTOS: readonly GaleriaFotoEntity[] =
+  MOCK_VISTORIAS.flatMap((v) =>
+    v.fotos.map((f) => criarFotoGaleriaDeVistoria(v, f))
+  );
 
 export type WizardStep = "modalidade" | "dados_iniciais" | "coleta";
 
@@ -22,10 +33,10 @@ interface MobileAppState {
   networkMode: NetworkMode;
   wizardStep: WizardStep;
   usuarioNome: string;
-  usuarioEmail: string;
   tipoRelatorio: TipoRelatorio;
   categoriaRelatorio: CategoriaRelatorio;
   vistorias: VistoriaSessionEntity[];
+  galeriaFotos: GaleriaFotoEntity[];
   activeVistoriaId: string;
   toggleOnlineMode: () => void;
   setNetworkMode: (mode: NetworkMode) => void;
@@ -60,6 +71,28 @@ interface MobileAppState {
     vistoriaId: string,
     ocorrencia: Omit<OcorrenciaEntity, "numero" | "idFiscalizacao">
   ) => void;
+  atualizarOcorrencia: (
+    vistoriaId: string,
+    ocorrenciaNumero: number,
+    dados: Omit<OcorrenciaEntity, "numero" | "idFiscalizacao" | "relacionamento">
+  ) => void;
+  atualizarRelacionamentoOcorrencia: (params: {
+    vistoriaId: string;
+    ocorrenciaNumero: number;
+    sigla: TipoAchado;
+    siglas?: readonly string[];
+    faixa?: string;
+    setorPredial?: string;
+    codificacao?: string;
+    fundamento: string;
+    determinacao: string;
+  }) => void;
+  removerFotoOcorrencia: (
+    vistoriaId: string,
+    ocorrenciaNumero: number,
+    alvo: FotoOcorrenciaAlvo
+  ) => "atualizada" | "ocorrencia_excluida";
+  excluirOcorrencia: (vistoriaId: string, ocorrenciaNumero: number) => void;
   relacionarOcorrencia: (params: {
     vistoriaId: string;
     ocorrenciaNumero: number;
@@ -74,6 +107,7 @@ interface MobileAppState {
   finalizarVistoria: (vistoriaId: string, nomeIdRelatorio: string) => void;
   reabrirVistoria: (vistoriaId: string) => void;
   excluirVistorias: (vistoriaIds: readonly string[]) => void;
+  excluirFotosGaleria: (fotoIds: readonly string[]) => void;
   toggleStandbyVistoria: (vistoriaId: string) => void;
   executarAutoSyncFinalizados: () => void;
   atualizarRecomendacoesSocicam: (vistoriaId: string, texto: string) => void;
@@ -87,10 +121,10 @@ export const useMobileStore = create<MobileAppState>((set, get) => ({
   networkMode: "offline_manual",
   wizardStep: "modalidade",
   usuarioNome: "Equipe Técnica CTR",
-  usuarioEmail: "equipe.campo@institucional.gov.br",
   tipoRelatorio: "CRA",
   categoriaRelatorio: "Fiscalização",
   vistorias: [...MOCK_VISTORIAS],
+  galeriaFotos: [...INITIAL_GALERIA_FOTOS],
   activeVistoriaId: "",
 
   toggleOnlineMode: () =>
@@ -169,8 +203,8 @@ export const useMobileStore = create<MobileAppState>((set, get) => ({
       minute: "2-digit",
     });
     const horaFinal = cfg.exibeHora ? hora?.trim() || horaAtual : "";
-    const newId = `v-${state.tipoRelatorio.toLowerCase()}-${Date.now()}`;
     const seq = String(state.vistorias.length + 1).padStart(3, "0");
+    const newId = `v-${state.tipoRelatorio.toLowerCase()}-${Date.now()}-${seq}`;
 
     const localFinal =
       state.tipoRelatorio === "SOCICAM"
@@ -282,6 +316,108 @@ export const useMobileStore = create<MobileAppState>((set, get) => ({
       }),
     })),
 
+  atualizarOcorrencia: (vistoriaId, ocorrenciaNumero, dados) =>
+    set((state) => ({
+      vistorias: state.vistorias.map((v) => {
+        if (v.id !== vistoriaId) return v;
+        return {
+          ...v,
+          ocorrencias: v.ocorrencias.map((oc) =>
+            oc.numero === ocorrenciaNumero
+              ? {
+                  ...oc,
+                  ...dados,
+                  numero: oc.numero,
+                  idFiscalizacao: oc.idFiscalizacao,
+                  relacionamento: oc.relacionamento,
+                }
+              : oc
+          ),
+          syncStatus: "pending",
+          atualizadaEm: "Agora · Ocorrência editada",
+        };
+      }),
+    })),
+
+  atualizarRelacionamentoOcorrencia: ({
+    vistoriaId,
+    ocorrenciaNumero,
+    sigla,
+    siglas,
+    faixa,
+    setorPredial,
+    codificacao,
+    fundamento,
+    determinacao,
+  }) =>
+    set((state) => ({
+      vistorias: state.vistorias.map((v) => {
+        if (v.id !== vistoriaId) return v;
+        return {
+          ...v,
+          ocorrencias: v.ocorrencias.map((oc) =>
+            oc.numero === ocorrenciaNumero
+              ? aplicarEdicaoRelacionamento({
+                  tipoRelatorio: v.tipoRelatorio,
+                  ocorrencia: oc,
+                  sigla,
+                  siglas,
+                  faixa,
+                  setorPredial,
+                  codificacao,
+                  fundamento,
+                  determinacao,
+                })
+              : oc
+          ),
+          syncStatus: "pending",
+          atualizadaEm: "Agora · Relação atualizada",
+        };
+      }),
+    })),
+
+  removerFotoOcorrencia: (vistoriaId, ocorrenciaNumero, alvo) => {
+    const vistoria = get().vistorias.find((v) => v.id === vistoriaId);
+    const oc = vistoria?.ocorrencias.find((o) => o.numero === ocorrenciaNumero);
+    if (!vistoria || !oc) return "atualizada";
+
+    const resultado = removerFotoDeOcorrencia(oc, alvo);
+    if (resultado.acao === "excluir_ocorrencia") {
+      get().excluirOcorrencia(vistoriaId, ocorrenciaNumero);
+      return "ocorrencia_excluida";
+    }
+
+    set((state) => ({
+      vistorias: state.vistorias.map((v) => {
+        if (v.id !== vistoriaId) return v;
+        return {
+          ...v,
+          ocorrencias: v.ocorrencias.map((item) =>
+            item.numero === ocorrenciaNumero ? resultado.ocorrencia : item
+          ),
+          syncStatus: "pending",
+          atualizadaEm: "Agora · Foto removida da ocorrência",
+        };
+      }),
+    }));
+    return "atualizada";
+  },
+
+  excluirOcorrencia: (vistoriaId, ocorrenciaNumero) =>
+    set((state) => ({
+      vistorias: state.vistorias.map((v) => {
+        if (v.id !== vistoriaId) return v;
+        return {
+          ...v,
+          ocorrencias: v.ocorrencias.filter(
+            (oc) => oc.numero !== ocorrenciaNumero
+          ),
+          syncStatus: "pending",
+          atualizadaEm: "Agora · Ocorrência excluída",
+        };
+      }),
+    })),
+
   relacionarOcorrencia: ({
     vistoriaId,
     ocorrenciaNumero,
@@ -325,24 +461,25 @@ export const useMobileStore = create<MobileAppState>((set, get) => ({
       return validado;
     }
 
+    const jaTemFoto =
+      fotoRelacionadaNome &&
+      vistoria.fotos.some((f) => f.nomeArquivo === fotoRelacionadaNome);
+    const novaFotoRel: FotoMidiaEntity | null =
+      fotoRelacionadaNome && !jaTemFoto
+        ? {
+            id: `foto-rel-${Date.now()}`,
+            nomeArquivo: fotoRelacionadaNome,
+            localUri: `sandbox://vistorias/${vistoriaId}/${fotoRelacionadaNome}`,
+            tamanhoKb: 194,
+            capturadaEm: hora,
+            syncStatus: "pending",
+            ocorrenciaNumero,
+          }
+        : null;
+
     set({
       vistorias: state.vistorias.map((v) => {
         if (v.id !== vistoriaId) return v;
-        const jaTemFoto =
-          fotoRelacionadaNome &&
-          v.fotos.some((f) => f.nomeArquivo === fotoRelacionadaNome);
-        const novaFotoRel: FotoMidiaEntity | null =
-          fotoRelacionadaNome && !jaTemFoto
-            ? {
-                id: `foto-rel-${Date.now()}`,
-                nomeArquivo: fotoRelacionadaNome,
-                localUri: `sandbox://vistorias/${vistoriaId}/${fotoRelacionadaNome}`,
-                tamanhoKb: 194,
-                capturadaEm: hora,
-                syncStatus: "pending",
-                ocorrenciaNumero,
-              }
-            : null;
         return {
           ...v,
           fotos: novaFotoRel ? [...v.fotos, novaFotoRel] : v.fotos,
@@ -355,6 +492,9 @@ export const useMobileStore = create<MobileAppState>((set, get) => ({
           atualizadaEm: `Hoje · ${hora}`,
         };
       }),
+      galeriaFotos: novaFotoRel
+        ? [criarFotoGaleriaDeVistoria(vistoria, novaFotoRel), ...state.galeriaFotos]
+        : state.galeriaFotos,
     });
 
     return { ok: true };
@@ -419,8 +559,17 @@ export const useMobileStore = create<MobileAppState>((set, get) => ({
       const deletingActive = toDelete.has(state.activeVistoriaId);
       return {
         vistorias: state.vistorias.filter((v) => !toDelete.has(v.id)),
+        galeriaFotos: desvincularFotosDeVistorias(state.galeriaFotos, vistoriaIds),
         activeVistoriaId: deletingActive ? "" : state.activeVistoriaId,
         wizardStep: deletingActive ? "modalidade" : state.wizardStep,
+      };
+    }),
+
+  excluirFotosGaleria: (fotoIds) =>
+    set((state) => {
+      const toDelete = new Set(fotoIds);
+      return {
+        galeriaFotos: state.galeriaFotos.filter((f) => !toDelete.has(f.id)),
       };
     }),
 
@@ -494,6 +643,9 @@ export const useMobileStore = create<MobileAppState>((set, get) => ({
             }
           : v
       ),
+      galeriaFotos: target
+        ? [criarFotoGaleriaDeVistoria(target, novaFoto), ...state.galeriaFotos]
+        : state.galeriaFotos,
     });
 
     return novaFoto;

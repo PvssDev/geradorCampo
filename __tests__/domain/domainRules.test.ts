@@ -5,16 +5,35 @@ import {
   RESPONSAVEIS_OFICIAIS,
 } from "../../src/domain/config/concessionConfig";
 import {
+  alternarFiltroOpcional,
+  alternarSelecaoIds,
+  aplicarEdicaoRelacionamento,
+  aplicarFiltrosVistoriasAbertas,
   aplicarToquePeriodo,
   calcularCodificacaoCra,
   calcularEstatisticasMonitoramento,
+  calcularProgressoSync,
   construirRelacionamentoValidado,
+  contarFiltrosAtivosVistorias,
+  contarFiltrosModal,
+  criarFotoGaleriaDeVistoria,
+  extrairOpcoesFiltroVistorias,
+  extrairSessoesUnicasGaleria,
+  FILTRO_GALERIA_SEM_VISTORIA,
+  FILTRO_VISTORIAS_INICIAL,
+  filtrarFotosGaleriaPorSessao,
+  filtrarVistoriasEmAberto,
+  filtrarVistoriasFinalizadas,
   formatarPeriodoIsoParaBr,
   obterSiglasPorConcessao,
   podeAutoSincronizar,
   podeRelacionarOcorrencia,
+  removerFotoDeOcorrencia,
+  resolverModoRede,
+  resumirContagensVistoria,
   sugerirCodificacaoPorConcessao,
 } from "../../src/domain/rules/domainRules";
+import { useMobileStore } from "../../src/application/store/useMobileStore";
 import {
   OcorrenciaEntity,
   VistoriaSessionEntity,
@@ -280,5 +299,365 @@ describe("Domínio Mobile — Regras Puras dos 6 Estados e Fluxo Limpo (BDD)", (
     expect(sugerirCodificacaoPorConcessao("SOCICAM", 2026, 3)).toBe(
       "SOCICAM/2026.003"
     );
+  });
+
+  it("Dado 2 sessões em aberto e 1 finalizada, Quando filtrar sessões em aberto, Então retorna estritamente as 2 em aberto", () => {
+    const criarSessao = (
+      id: string,
+      lifecycleStatus: "em_aberto" | "finalizada"
+    ): VistoriaSessionEntity => ({
+      id,
+      tipoRelatorio: "CRA",
+      categoriaRelatorio: "Fiscalização",
+      lifecycleStatus,
+      syncStandby: false,
+      fiscalizacao: {
+        idFiscalizacao: `ID-${id}`,
+        data: "25/11/2026",
+        hora: "09:00",
+        cidade: "Ipojuca",
+        local: "Rota do Atlântico",
+        pessoalResponsavel: "Equipe",
+        coordenador: "Coord",
+        contrato: "CT",
+        periodo: "25/11/2026",
+      },
+      ocorrencias: [
+        {
+          numero: 1,
+          idFiscalizacao: `ID-${id}`,
+          tipoAchado: "NC",
+          identificacao: "NC-01",
+          descricao: "Trinca",
+          determinacaoOuInfo: "",
+          constatacao: "",
+          analiseArpe: "",
+          situacao: "Pendente",
+        },
+        {
+          numero: 2,
+          idFiscalizacao: `ID-${id}`,
+          tipoAchado: "PA",
+          identificacao: "PA-02",
+          descricao: "Drenagem",
+          determinacaoOuInfo: "",
+          constatacao: "",
+          analiseArpe: "",
+          situacao: "Pendente",
+        },
+      ],
+      fotos: [],
+      totalAnteriorMonitoramento: 0,
+      syncStatus: "pending",
+      fotosEnviadas: 0,
+      atualizadaEm: "Hoje · 09:00",
+    });
+
+    const lista = [
+      criarSessao("a1", "em_aberto"),
+      criarSessao("f1", "finalizada"),
+      criarSessao("a2", "em_aberto"),
+    ];
+
+    const abertas = filtrarVistoriasEmAberto(lista);
+    expect(abertas.map((v) => v.id)).toEqual(["a1", "a2"]);
+
+    const resumo = resumirContagensVistoria(abertas[0]);
+    expect(resumo).toEqual({
+      totalFotos: 0,
+      totalOcorrencias: 2,
+      totalNcs: 1,
+      totalPas: 1,
+    });
+  });
+
+  it("Dado modo seleção múltipla, Quando alternar seleção de IDs, Então marca e desmarca de forma imutável", () => {
+    const s1 = alternarSelecaoIds([], "v-1");
+    expect(s1).toEqual(["v-1"]);
+
+    const s2 = alternarSelecaoIds(s1, "v-2");
+    expect(s2).toEqual(["v-1", "v-2"]);
+
+    const s3 = alternarSelecaoIds(s2, "v-1");
+    expect(s3).toEqual(["v-2"]);
+    expect(s2).toEqual(["v-1", "v-2"]);
+  });
+
+  it("Dado vistorias em aberto de concessões, datas e locais distintos, Quando aplicar filtros, Então filtra corretamente e extrai opções únicas", () => {
+    const makeSession = (
+      id: string,
+      tipoRelatorio: "CRA" | "CRC" | "SOCICAM",
+      categoriaRelatorio: "Fiscalização" | "Monitoramento",
+      data: string,
+      local: string,
+      lifecycleStatus: "em_aberto" | "finalizada" = "em_aberto"
+    ): VistoriaSessionEntity => ({
+      id,
+      tipoRelatorio,
+      categoriaRelatorio,
+      lifecycleStatus,
+      syncStandby: false,
+      fiscalizacao: {
+        idFiscalizacao: id,
+        data,
+        hora: "09:00",
+        cidade: "Recife",
+        local,
+        pessoalResponsavel: "Equipe",
+        coordenador: "Coord",
+        contrato: "CT",
+        periodo: data,
+      },
+      ocorrencias: [],
+      fotos: [],
+      totalAnteriorMonitoramento: 0,
+      syncStatus: "pending",
+      fotosEnviadas: 0,
+      atualizadaEm: "Hoje",
+    });
+
+    const sessoes = [
+      makeSession("s1", "CRA", "Fiscalização", "23/11/2026", "Rota do Atlântico"),
+      makeSession("s2", "SOCICAM", "Monitoramento", "23/11/2026", "Terminal Rodoviário de Caruaru"),
+      makeSession("s3", "CRA", "Monitoramento", "25/11/2026", "Rota do Atlântico"),
+      makeSession("s4", "CRC", "Monitoramento", "23/11/2026", "Sistema Viário do Paiva", "finalizada"),
+    ];
+
+    expect(contarFiltrosAtivosVistorias(FILTRO_VISTORIAS_INICIAL)).toBe(0);
+    expect(contarFiltrosModal(FILTRO_VISTORIAS_INICIAL)).toBe(0);
+    expect(alternarFiltroOpcional<string>(null, "CRA")).toBe("CRA");
+    expect(alternarFiltroOpcional<string>("CRA", "CRA")).toBeNull();
+    expect(aplicarFiltrosVistoriasAbertas(sessoes, FILTRO_VISTORIAS_INICIAL).map((s) => s.id)).toEqual([
+      "s1",
+      "s2",
+      "s3",
+    ]);
+
+    const filtroCraFisc = {
+      ...FILTRO_VISTORIAS_INICIAL,
+      concessao: "CRA" as const,
+      modalidade: "Fiscalização" as const,
+    };
+    expect(contarFiltrosModal(filtroCraFisc)).toBe(2);
+    expect(contarFiltrosAtivosVistorias(filtroCraFisc)).toBe(2);
+    expect(aplicarFiltrosVistoriasAbertas(sessoes, filtroCraFisc).map((s) => s.id)).toEqual(["s1"]);
+
+    const filtroDataLocal = {
+      ...FILTRO_VISTORIAS_INICIAL,
+      concessao: "SOCICAM" as const,
+      data: "23/11/2026",
+      local: "Terminal Rodoviário de Caruaru",
+    };
+    expect(contarFiltrosModal(filtroDataLocal)).toBe(1);
+    expect(contarFiltrosAtivosVistorias(filtroDataLocal)).toBe(3);
+    expect(aplicarFiltrosVistoriasAbertas(sessoes, filtroDataLocal).map((s) => s.id)).toEqual(["s2"]);
+
+    const opcoes = extrairOpcoesFiltroVistorias(filtrarVistoriasEmAberto(sessoes));
+    expect(opcoes.datas).toEqual(["23/11/2026", "25/11/2026"]);
+    expect(opcoes.locais).toEqual([
+      "Rota do Atlântico",
+      "Terminal Rodoviário de Caruaru",
+    ]);
+  });
+
+  it("Dado fotos na Galeria Local, Quando apagar uma vistoria, Então fotos permanecem intactas na Galeria e só são removidas pela ação da Galeria", () => {
+    const store = useMobileStore.getState();
+    const vistoriaAlvo = store.vistorias[0];
+    const totalInicialGaleria = store.galeriaFotos.length;
+
+    const fotoNova = store.simularCapturaFoto(vistoriaAlvo.id);
+    const aposCaptura = useMobileStore.getState();
+    expect(aposCaptura.galeriaFotos.length).toBe(totalInicialGaleria + 1);
+
+    const fotoNaGaleria = aposCaptura.galeriaFotos.find(
+      (f) => f.nomeArquivo === fotoNova.nomeArquivo
+    );
+    expect(fotoNaGaleria).toBeDefined();
+    expect(fotoNaGaleria?.localUri).toContain("sandbox://galeria/");
+
+    // Apaga a vistoria na aba Vistorias — fotos DEVEM sobreviver na Galeria como "sem vistoria"
+    aposCaptura.excluirVistorias([vistoriaAlvo.id]);
+    const aposExcluirVistoria = useMobileStore.getState();
+    expect(
+      aposExcluirVistoria.vistorias.some((v) => v.id === vistoriaAlvo.id)
+    ).toBe(false);
+    expect(aposExcluirVistoria.galeriaFotos.length).toBe(
+      totalInicialGaleria + 1
+    );
+    const fotoOrfa = aposExcluirVistoria.galeriaFotos.find(
+      (f) => f.id === fotoNaGaleria?.id
+    );
+    expect(fotoOrfa?.vistoriaId).toBeNull();
+    expect(fotoOrfa?.idFiscalizacao).toBeNull();
+
+    // Filtro de sessões lista apenas vistorias existentes + contagem de "Fotos sem vistoria"
+    const opcoesGaleria = extrairSessoesUnicasGaleria(
+      aposExcluirVistoria.galeriaFotos,
+      aposExcluirVistoria.vistorias.map((v) => v.id)
+    );
+    expect(
+      opcoesGaleria.sessoes.some(
+        (s) => s.idFiscalizacao === vistoriaAlvo.fiscalizacao.idFiscalizacao
+      )
+    ).toBe(false);
+    expect(opcoesGaleria.totalSemVistoria).toBeGreaterThanOrEqual(1);
+
+    const somenteOrfas = filtrarFotosGaleriaPorSessao(
+      aposExcluirVistoria.galeriaFotos,
+      [FILTRO_GALERIA_SEM_VISTORIA]
+    );
+    expect(somenteOrfas.some((f) => f.id === fotoNaGaleria?.id)).toBe(true);
+
+    // Multi-seleção no filtro: combina uma sessão existente + fotos sem vistoria
+    const primeiraSessaoAtiva = opcoesGaleria.sessoes[0]?.idFiscalizacao;
+    if (primeiraSessaoAtiva) {
+      const combinadas = filtrarFotosGaleriaPorSessao(
+        aposExcluirVistoria.galeriaFotos,
+        [primeiraSessaoAtiva, FILTRO_GALERIA_SEM_VISTORIA]
+      );
+      expect(combinadas.some((f) => f.id === fotoNaGaleria?.id)).toBe(true);
+      expect(
+        combinadas.some((f) => f.idFiscalizacao === primeiraSessaoAtiva)
+      ).toBe(true);
+    }
+
+    // Exclusão explícita na Galeria remove apenas o ID selecionado
+    if (fotoNaGaleria) {
+      aposExcluirVistoria.excluirFotosGaleria([fotoNaGaleria.id]);
+      const aposExcluirGaleria = useMobileStore.getState();
+      expect(aposExcluirGaleria.galeriaFotos.length).toBe(totalInicialGaleria);
+      expect(
+        aposExcluirGaleria.galeriaFotos.some((f) => f.id === fotoNaGaleria.id)
+      ).toBe(false);
+    }
+
+    // Verifica helper puro criarFotoGaleriaDeVistoria
+    const criada = criarFotoGaleriaDeVistoria(vistoriaAlvo, fotoNova);
+    expect(criada.tipoRelatorio).toBe(vistoriaAlvo.tipoRelatorio);
+    expect(criada.categoriaRelatorio).toBe(vistoriaAlvo.categoriaRelatorio);
+  });
+
+  it("Dado ocorrência com foto relacionada, Quando editar fundamento/determinação ou remover uma foto, Então compartilha entre ambas e promove/exclui corretamente", () => {
+    const ocBase: OcorrenciaEntity = {
+      numero: 1,
+      idFiscalizacao: "FISC-CRA-2026-001",
+      tipoAchado: "NC",
+      identificacao: "CRA.ST601.0010-0020/2026.001",
+      codificacao: "CRA.ST601.0010-0020/2026.001",
+      descricao: "FI (fissuras)",
+      pista: "Sul",
+      direcaoFaixa: "Direita",
+      determinacaoOuInfo: "Determinação inicial",
+      constatacao: "FI",
+      analiseArpe: "Fundamento inicial",
+      situacao: "Pendente",
+      fotoAtualNome: "FOTO_001.jpg",
+      relacionamento: {
+        sigla: "PA",
+        siglas: ["TTC"],
+        faixa: "Esquerda",
+        codificacao: "CRA.ST601.0010-0020/2026.002",
+        fotoRelacionadaNome: "FOTO_002.jpg",
+        criadoEm: "10:15",
+      },
+    };
+
+    // Edição pela 2ª foto compartilha fundamento e determinação na raiz
+    const editada = aplicarEdicaoRelacionamento({
+      tipoRelatorio: "CRA",
+      ocorrencia: ocBase,
+      sigla: "NC",
+      siglas: ["TTC", "FI"],
+      faixa: "Direita",
+      codificacao: "CRA.ST601.0010-0020/2026.002",
+      fundamento: "Fundamento atualizado para ambas",
+      determinacao: "Determinação atualizada 15 dias",
+    });
+    expect(editada.analiseArpe).toBe("Fundamento atualizado para ambas");
+    expect(editada.determinacaoOuInfo).toBe("Determinação atualizada 15 dias");
+    expect(editada.relacionamento?.sigla).toBe("NC");
+    expect(editada.relacionamento?.faixa).toBe("Direita");
+
+    // Remover 2ª foto remove apenas a relação
+    const semRelacao = removerFotoDeOcorrencia(editada, "relacionada");
+    expect(semRelacao.acao).toBe("atualizar");
+    if (semRelacao.acao === "atualizar") {
+      expect(semRelacao.ocorrencia.relacionamento).toBeUndefined();
+      expect(semRelacao.ocorrencia.fotoAtualNome).toBe("FOTO_001.jpg");
+    }
+
+    // Remover 1ª foto promove a 2ª preservando fundamento e determinação compartilhados
+    const promovida = removerFotoDeOcorrencia(editada, "principal");
+    expect(promovida.acao).toBe("atualizar");
+    if (promovida.acao === "atualizar") {
+      expect(promovida.ocorrencia.relacionamento).toBeUndefined();
+      expect(promovida.ocorrencia.fotoAtualNome).toBe("FOTO_002.jpg");
+      expect(promovida.ocorrencia.analiseArpe).toBe("Fundamento atualizado para ambas");
+      expect(promovida.ocorrencia.determinacaoOuInfo).toBe("Determinação atualizada 15 dias");
+    }
+
+    // Remover 1ª foto quando não há relação sinaliza exclusão da ocorrência inteira
+    if (semRelacao.acao === "atualizar") {
+      expect(removerFotoDeOcorrencia(semRelacao.ocorrencia, "principal")).toEqual({
+        acao: "excluir_ocorrencia",
+      });
+    }
+  });
+
+  it("Dado sessões finalizadas com Standby e modo Online, Quando sincronizar ou reabrir, Então respeita Standby e devolve reaberta para em_aberto", () => {
+    const s = useMobileStore.getState();
+    s.setNetworkMode("offline_manual");
+
+    const idNormal = s.criarVistoria({
+      idFiscalizacao: "FISC-CRA-TEST-01",
+      local: "Rota do Atlântico",
+      cidade: "Ipojuca",
+      equipe: "Equipe A",
+      coordenador: "Coord",
+    });
+    const idStandby = s.criarVistoria({
+      idFiscalizacao: "FISC-SOC-TEST-02",
+      local: "Terminal Rodoviário de Caruaru",
+      cidade: "Caruaru",
+      equipe: "Equipe B",
+      coordenador: "Coord",
+    });
+
+    const st1 = useMobileStore.getState();
+    st1.finalizarVistoria(idNormal, "FISC-CRA-TEST-01");
+    st1.finalizarVistoria(idStandby, "FISC-SOC-TEST-02");
+    st1.toggleStandbyVistoria(idStandby);
+
+    const finalizadasAntes = filtrarVistoriasFinalizadas(
+      useMobileStore.getState().vistorias
+    );
+    expect(finalizadasAntes.some((v) => v.id === idNormal)).toBe(true);
+    expect(finalizadasAntes.some((v) => v.id === idStandby)).toBe(true);
+
+    // Ativa Online: apenas a sessão normal deve subir; a em Standby permanece pendente
+    useMobileStore.getState().setNetworkMode("online");
+    const aposSync = useMobileStore.getState().vistorias;
+    const vNormal = aposSync.find((v) => v.id === idNormal);
+    const vStandby = aposSync.find((v) => v.id === idStandby);
+    expect(vNormal?.syncStatus).toBe("synced");
+    expect(vStandby?.syncStatus).toBe("pending");
+    expect(vStandby?.syncStandby).toBe(true);
+    if (vNormal) {
+      expect(calcularProgressoSync(vNormal).percentual).toBe(100);
+    }
+
+    // Reabrir Finalizado devolve para em_aberto e limpa standby
+    useMobileStore.getState().reabrirVistoria(idStandby);
+    const reaberta = useMobileStore
+      .getState()
+      .vistorias.find((v) => v.id === idStandby);
+    expect(reaberta?.lifecycleStatus).toBe("em_aberto");
+    expect(reaberta?.syncStandby).toBe(false);
+
+    // Resolução automática de 3 estados (Online/Offline manual + Desconectado automático)
+    expect(resolverModoRede(true, true)).toBe("offline_manual");
+    expect(resolverModoRede(true, false)).toBe("offline_manual");
+    expect(resolverModoRede(false, true)).toBe("online");
+    expect(resolverModoRede(false, false)).toBe("disconnected");
   });
 });

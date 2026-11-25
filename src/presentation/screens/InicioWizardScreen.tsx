@@ -18,7 +18,10 @@ import {
 } from "lucide-react-native";
 import { CONCESSION_CONFIG } from "../../domain/config/concessionConfig";
 import { OcorrenciaEntity } from "../../domain/entities/types";
-import { podeRelacionarOcorrencia } from "../../domain/rules/domainRules";
+import {
+  FotoOcorrenciaAlvo,
+  podeRelacionarOcorrencia,
+} from "../../domain/rules/domainRules";
 import { useMobileStore } from "../../application/store/useMobileStore";
 import { toast } from "../../application/store/useToastStore";
 import { ARPE_COLORS, getConcessionTheme } from "../theme/colors";
@@ -63,6 +66,10 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
     iniciarNovoRelatorioWizard,
     simularCapturaFoto,
     adicionarOcorrencia,
+    atualizarOcorrencia,
+    atualizarRelacionamentoOcorrencia,
+    removerFotoOcorrencia,
+    excluirOcorrencia,
     vincularFotoUltimaOcorrencia,
     relacionarOcorrencia,
     finalizarVistoria,
@@ -86,6 +93,8 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
   const [previewVisible, setPreviewVisible] = useState(false);
   const [relacionarFluxoVisible, setRelacionarFluxoVisible] = useState(false);
   const [classificarVisible, setClassificarVisible] = useState(false);
+  const [editingOcorrenciaNum, setEditingOcorrenciaNum] = useState<number | null>(null);
+  const [editingTarget, setEditingTarget] = useState<FotoOcorrenciaAlvo>("principal");
   const [ocorrenciaSelecionadaNum, setOcorrenciaSelecionadaNum] = useState<
     number | null
   >(null);
@@ -146,6 +155,13 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
     novaOc: Omit<OcorrenciaEntity, "numero" | "idFiscalizacao">
   ) => {
     if (!vistoriaAtiva) return;
+    if (editingOcorrenciaNum !== null) {
+      atualizarOcorrencia(vistoriaAtiva.id, editingOcorrenciaNum, novaOc);
+      setClassificarVisible(false);
+      setEditingOcorrenciaNum(null);
+      toast.success("Ocorrência atualizada", "As alterações foram salvas.");
+      return;
+    }
     const proximoNumero = vistoriaAtiva.ocorrencias.length + 1;
     const fotoCriada = simularCapturaFoto(vistoriaAtiva.id, proximoNumero);
     adicionarOcorrencia(vistoriaAtiva.id, {
@@ -160,6 +176,14 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
       `${novaOc.tipoAchado} vinculada à foto ${photoDraft?.nomeArquivo || fotoCriada.nomeArquivo}`
     );
   };
+
+  const ocorrenciaEmEdicao = useMemo(
+    () =>
+      vistoriaAtiva?.ocorrencias.find(
+        (o) => o.numero === editingOcorrenciaNum
+      ) ?? null,
+    [vistoriaAtiva, editingOcorrenciaNum]
+  );
 
   const ocorrenciaSelecionada = useMemo(
     () =>
@@ -521,10 +545,29 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
             categoriaRelatorio={vistoriaAtiva.categoriaRelatorio}
             localSessao={vistoriaAtiva.fiscalizacao.local}
             proximoSequencial={vistoriaAtiva.ocorrencias.length + 1}
-            photoDraft={photoDraft}
+            photoDraft={editingOcorrenciaNum !== null ? null : photoDraft}
+            editingOcorrencia={ocorrenciaEmEdicao}
+            editingTarget={editingTarget}
             accentColor={theme.primary}
-            onClose={() => setClassificarVisible(false)}
+            onClose={() => {
+              setClassificarVisible(false);
+              setEditingOcorrenciaNum(null);
+            }}
             onSalvar={handleSalvarOcorrenciaComFoto}
+            onSalvarEdicaoRelacionada={(params) => {
+              if (editingOcorrenciaNum === null) return;
+              atualizarRelacionamentoOcorrencia({
+                vistoriaId: vistoriaAtiva.id,
+                ocorrenciaNumero: editingOcorrenciaNum,
+                ...params,
+              });
+              setClassificarVisible(false);
+              setEditingOcorrenciaNum(null);
+              toast.success(
+                "Ocorrência atualizada",
+                "Fundamento e determinação sincronizados para ambas as fotos."
+              );
+            }}
           />
 
           <OcorrenciaDetalheRelacaoModal
@@ -534,6 +577,38 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
             accentColor={theme.primary}
             accentSoft={theme.primarySoft}
             onClose={() => setOcorrenciaSelecionadaNum(null)}
+            onEditar={(alvo) => {
+              if (!ocorrenciaSelecionada) return;
+              const num = ocorrenciaSelecionada.numero;
+              setOcorrenciaSelecionadaNum(null);
+              setEditingOcorrenciaNum(num);
+              setEditingTarget(alvo);
+              setClassificarVisible(true);
+            }}
+            onRemoverFoto={(alvo) => {
+              if (!ocorrenciaSelecionada) return;
+              const res = removerFotoOcorrencia(
+                vistoriaAtiva.id,
+                ocorrenciaSelecionada.numero,
+                alvo
+              );
+              if (res === "ocorrencia_excluida") {
+                setOcorrenciaSelecionadaNum(null);
+              }
+              toast.success(
+                "Foto removida",
+                "A foto continua preservada na Galeria Local."
+              );
+            }}
+            onExcluirOcorrencia={() => {
+              if (!ocorrenciaSelecionada) return;
+              excluirOcorrencia(vistoriaAtiva.id, ocorrenciaSelecionada.numero);
+              setOcorrenciaSelecionadaNum(null);
+              toast.success(
+                "Ocorrência excluída",
+                "As fotos permanecem seguras na Galeria Local."
+              );
+            }}
           />
 
           <FinalizarRelatorioModal

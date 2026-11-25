@@ -6,19 +6,20 @@ import {
   ClipboardList,
   Home,
   Images,
-  Settings,
+  User,
 } from "lucide-react-native";
 import { useMobileStore } from "../../application/store/useMobileStore";
 import { ARPE_COLORS, getConcessionTheme } from "../theme/colors";
-import { RADII, SPACING, TOUCH_TARGET_MIN } from "../theme/tokens";
+import { RADII, TOUCH_TARGET_MIN } from "../theme/tokens";
 import { InicioWizardScreen } from "../screens/InicioWizardScreen";
-import { HomeVistoriasScreen } from "../screens/HomeVistoriasScreen";
-import { SyncQueueScreen } from "../screens/SyncQueueScreen";
-import { AjustesScreen } from "../screens/AjustesScreen";
+import { VistoriasAbertasScreen } from "../screens/VistoriasAbertasScreen";
+import { GaleriaLocalScreen } from "../screens/GaleriaLocalScreen";
+import { FinalizadosScreen } from "../screens/FinalizadosScreen";
+import { PerfilScreen } from "../screens/PerfilScreen";
 import {
+  AnimatedTabStage,
   FLUID_EASE,
   NATIVE_DRIVER,
-  TabFadeView,
   useAnimatedColor,
 } from "../components/common/MotionPrimitives";
 
@@ -27,14 +28,14 @@ type BottomTabKey =
   | "vistorias"
   | "galeria"
   | "finalizados"
-  | "configuracao";
+  | "perfil";
 
 const TAB_ORDER: readonly BottomTabKey[] = [
   "inicio",
   "vistorias",
   "galeria",
   "finalizados",
-  "configuracao",
+  "perfil",
 ];
 
 export const RootNavigator: React.FC = () => {
@@ -68,10 +69,6 @@ export const RootNavigator: React.FC = () => {
   const finalizadasPendentesCount = vistorias.filter(
     (v) => v.lifecycleStatus === "finalizada" && v.syncStatus !== "synced"
   ).length;
-  const totalFotosLocais = vistorias.reduce(
-    (acc, v) => acc + v.fotos.length,
-    0
-  );
 
   const tabs: readonly {
     key: BottomTabKey;
@@ -79,74 +76,75 @@ export const RootNavigator: React.FC = () => {
     icon: typeof Home;
     badge?: number;
   }[] = [
-    { key: "inicio", label: "Início", icon: Home },
-    {
-      key: "vistorias",
-      label: "Vistorias",
-      icon: ClipboardList,
-      badge: abertasCount > 0 ? abertasCount : undefined,
-    },
-    { key: "galeria", label: "Galeria", icon: Images },
-    {
-      key: "finalizados",
-      label: "Finalizados",
-      icon: CheckCircle2,
-      badge:
-        finalizadasPendentesCount > 0 ? finalizadasPendentesCount : undefined,
-    },
-    { key: "configuracao", label: "Configuração", icon: Settings },
-  ];
+      { key: "inicio", label: "Início", icon: Home },
+      {
+        key: "vistorias",
+        label: "Vistorias",
+        icon: ClipboardList,
+        badge: abertasCount > 0 ? abertasCount : undefined,
+      },
+      { key: "galeria", label: "Galeria", icon: Images },
+      {
+        key: "finalizados",
+        label: "Finalizados",
+        icon: CheckCircle2,
+        badge:
+          finalizadasPendentesCount > 0 ? finalizadasPendentesCount : undefined,
+      },
+      { key: "perfil", label: "Perfil", icon: User },
+    ];
 
   const tabSlotWidth = barWidth > 0 ? (barWidth - 8) / tabs.length : 0;
   const indicatorTranslateX =
     tabSlotWidth > 0
       ? indicatorIndex.interpolate({
-          inputRange: [0, tabs.length - 1],
-          outputRange: [
-            4 + tabSlotWidth * 0.22,
-            4 + tabSlotWidth * (tabs.length - 1) + tabSlotWidth * 0.22,
-          ],
-        })
+        inputRange: [0, tabs.length - 1],
+        outputRange: [
+          4 + tabSlotWidth * 0.22,
+          4 + tabSlotWidth * (tabs.length - 1) + tabSlotWidth * 0.22,
+        ],
+      })
       : 0;
 
   return (
     <View style={styles.root}>
-      {/* Fade sutil e instantâneo entre as 5 abas (sem slide pesado) */}
-      <TabFadeView animKey={activeTab} style={styles.screenContainer}>
-        {activeTab === "inicio" && (
-          <InicioWizardScreen
-            onFinalizadoSuccess={() => setActiveTab("finalizados")}
-          />
-        )}
-
-        {activeTab === "vistorias" && (
-          <HomeVistoriasScreen
-            onOpenVistoria={(vistoriaId) => {
-              retomarVistoriaNoWizard(vistoriaId);
-              setActiveTab("inicio");
-            }}
-            onNovaVistoria={() => {
-              iniciarNovoRelatorioWizard();
-              setActiveTab("inicio");
-            }}
-          />
-        )}
-
-        {activeTab === "galeria" && (
-          <SafeAreaView style={styles.placeholderSafe} edges={["top"]}>
-            <View style={styles.placeholderCard}>
-              <Images size={28} color={theme.primary} />
-              <Text style={styles.placeholderTitle}>Galeria Local</Text>
-              <Text style={styles.placeholderSubtitle}>
-                {totalFotosLocais} foto(s) salvas localmente nas sessões atuais. A grade por cores, filtro por sessão e compartilhamento serão implementados na Parte 3 da Ordem de Execução.
-              </Text>
-            </View>
-          </SafeAreaView>
-        )}
-
-        {activeTab === "finalizados" && <SyncQueueScreen />}
-        {activeTab === "configuracao" && <AjustesScreen />}
-      </TabFadeView>
+      {/* Transição fluida em 2 tempos (cabeçalho sobe ao sair e desce ao entrar, sem piscar) */}
+      <AnimatedTabStage
+        activeKey={activeTab}
+        style={styles.screenContainer}
+        renderScreen={(tab) => {
+          if (tab === "inicio") {
+            return (
+              <InicioWizardScreen
+                onFinalizadoSuccess={() => setActiveTab("finalizados")}
+              />
+            );
+          }
+          if (tab === "vistorias") {
+            return (
+              <VistoriasAbertasScreen
+                onOpenVistoria={(vistoriaId) => {
+                  retomarVistoriaNoWizard(vistoriaId);
+                  setActiveTab("inicio");
+                }}
+                onNovaVistoria={() => {
+                  iniciarNovoRelatorioWizard();
+                  setActiveTab("inicio");
+                }}
+              />
+            );
+          }
+          if (tab === "galeria") return <GaleriaLocalScreen />;
+          if (tab === "finalizados") {
+            return (
+              <FinalizadosScreen
+                onReabrirSuccess={() => setActiveTab("vistorias")}
+              />
+            );
+          }
+          return <PerfilScreen />;
+        }}
+      />
 
       {/* Bottom Tab Bar Limpa com indicador deslizante suave */}
       <SafeAreaView edges={["bottom"]} style={styles.tabBarSafe}>
@@ -227,35 +225,6 @@ const styles = StyleSheet.create({
   },
   screenContainer: {
     flex: 1,
-  },
-  placeholderSafe: {
-    flex: 1,
-    backgroundColor: ARPE_COLORS.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: SPACING.xl,
-  },
-  placeholderCard: {
-    width: "100%",
-    maxWidth: 420,
-    padding: SPACING.xl,
-    borderRadius: RADII.xl,
-    borderWidth: 1,
-    borderColor: ARPE_COLORS.border,
-    backgroundColor: ARPE_COLORS.surfaceMuted,
-    alignItems: "center",
-    gap: SPACING.sm,
-  },
-  placeholderTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: ARPE_COLORS.textPrimary,
-  },
-  placeholderSubtitle: {
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: "center",
-    color: ARPE_COLORS.textSecondary,
   },
   tabBarSafe: {
     backgroundColor: ARPE_COLORS.white,

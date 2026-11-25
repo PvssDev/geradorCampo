@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   PressableProps,
@@ -23,6 +24,36 @@ import { ToastViewport } from "./ToastViewport";
 
 export const NATIVE_DRIVER = Platform.OS !== "web";
 export const FLUID_EASE = Easing.bezier(0.22, 1, 0.36, 1);
+
+/**
+ * Swipe horizontal entre abas sem interferir em onLongPress (nunca captura início do toque)
+ * nem em scroll vertical (exige movimento horizontal claro: |dx| > 28 e |dx| > |dy| * 1.8).
+ */
+export function useHorizontalSwipe(params: {
+  readonly onSwipeLeft: () => void;
+  readonly onSwipeRight: () => void;
+}) {
+  const callbacksRef = useRef(params);
+  callbacksRef.current = params;
+
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Math.abs(gs.dx) > 28 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.8,
+      onPanResponderRelease: (_, gs) => {
+        const passedDistance = Math.abs(gs.dx) >= 64;
+        const passedFlick = Math.abs(gs.dx) >= 32 && Math.abs(gs.vx) >= 0.45;
+        if (!passedDistance && !passedFlick) return;
+
+        if (gs.dx < 0) callbacksRef.current.onSwipeLeft();
+        else callbacksRef.current.onSwipeRight();
+      },
+    })
+  ).current;
+
+  return responder.panHandlers;
+}
 
 /**
  * Interpola suavemente a troca entre duas cores hexadecimais (~240ms).
@@ -71,36 +102,36 @@ export const FadeSlideView: React.FC<{
   style,
   children,
 }) => {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(distance)).current;
+    const opacity = useRef(new Animated.Value(0)).current;
+    const translateY = useRef(new Animated.Value(distance)).current;
 
-  useEffect(() => {
-    opacity.setValue(0);
-    translateY.setValue(distance);
-    Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration,
-        delay,
-        easing: FLUID_EASE,
-        useNativeDriver: NATIVE_DRIVER,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: duration + 30,
-        delay,
-        easing: FLUID_EASE,
-        useNativeDriver: NATIVE_DRIVER,
-      }),
-    ]).start();
-  }, [animKey, delay, distance, duration, opacity, translateY]);
+    useEffect(() => {
+      opacity.setValue(0);
+      translateY.setValue(distance);
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration,
+          delay,
+          easing: FLUID_EASE,
+          useNativeDriver: NATIVE_DRIVER,
+        }),
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: duration + 30,
+          delay,
+          easing: FLUID_EASE,
+          useNativeDriver: NATIVE_DRIVER,
+        }),
+      ]).start();
+    }, [animKey, delay, distance, duration, opacity, translateY]);
 
-  return (
-    <Animated.View style={[style, { opacity, transform: [{ translateY }] }]}>
-      {children}
-    </Animated.View>
-  );
-};
+    return (
+      <Animated.View style={[style, { opacity, transform: [{ translateY }] }]}>
+        {children}
+      </Animated.View>
+    );
+  };
 
 /**
  * Transição direcional limpa (sem dupla montagem):
@@ -121,49 +152,123 @@ export const DirectionalTransition: React.FC<{
   style,
   children,
 }) => {
-  const prevKeyRef = useRef(stepKey);
-  const prevIndexRef = useRef(stepIndex);
-  const enterOpacity = useRef(new Animated.Value(1)).current;
-  const enterX = useRef(new Animated.Value(0)).current;
+    const prevKeyRef = useRef(stepKey);
+    const prevIndexRef = useRef(stepIndex);
+    const enterOpacity = useRef(new Animated.Value(1)).current;
+    const enterX = useRef(new Animated.Value(0)).current;
 
-  if (prevKeyRef.current !== stepKey) {
-    const dir = stepIndex >= prevIndexRef.current ? 1 : -1;
-    enterOpacity.setValue(0);
-    enterX.setValue(dir * distance);
-    prevKeyRef.current = stepKey;
-    prevIndexRef.current = stepIndex;
-  }
+    if (prevKeyRef.current !== stepKey) {
+      const dir = stepIndex >= prevIndexRef.current ? 1 : -1;
+      enterOpacity.setValue(0);
+      enterX.setValue(dir * distance);
+      prevKeyRef.current = stepKey;
+      prevIndexRef.current = stepIndex;
+    }
+
+    useEffect(() => {
+      Animated.parallel([
+        Animated.timing(enterOpacity, {
+          toValue: 1,
+          duration,
+          easing: FLUID_EASE,
+          useNativeDriver: NATIVE_DRIVER,
+        }),
+        Animated.timing(enterX, {
+          toValue: 0,
+          duration: duration + 20,
+          easing: FLUID_EASE,
+          useNativeDriver: NATIVE_DRIVER,
+        }),
+      ]).start();
+    }, [stepKey, duration, enterOpacity, enterX]);
+
+    return (
+      <View style={[styles.transitionClip, style]}>
+        <Animated.View
+          style={[
+            styles.transitionFill,
+            { opacity: enterOpacity, transform: [{ translateX: enterX }] },
+          ]}
+        >
+          {children}
+        </Animated.View>
+      </View>
+    );
+  };
+
+/**
+ * Transição fluida de abas em 2 tempos (sem piscar nem corte seco):
+ * ao trocar, o conteúdo/cabeçalho sobe suavemente saindo (130ms) e a nova aba desce suave (240ms).
+ */
+export function AnimatedTabStage<T extends string>({
+  activeKey,
+  style,
+  renderScreen,
+}: {
+  readonly activeKey: T;
+  readonly style?: StyleProp<ViewStyle>;
+  readonly renderScreen: (key: T) => React.ReactNode;
+}) {
+  const [displayedKey, setDisplayedKey] = useState<T>(activeKey);
+  const opacity = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(enterOpacity, {
-        toValue: 1,
-        duration,
-        easing: FLUID_EASE,
-        useNativeDriver: NATIVE_DRIVER,
-      }),
-      Animated.timing(enterX, {
+    if (activeKey === displayedKey) return;
+
+    const exitAnim = Animated.parallel([
+      Animated.timing(opacity, {
         toValue: 0,
-        duration: duration + 20,
+        duration: 130,
         easing: FLUID_EASE,
         useNativeDriver: NATIVE_DRIVER,
       }),
-    ]).start();
-  }, [stepKey, duration, enterOpacity, enterX]);
+      Animated.timing(translateY, {
+        toValue: -12,
+        duration: 130,
+        easing: FLUID_EASE,
+        useNativeDriver: NATIVE_DRIVER,
+      }),
+    ]);
+
+    exitAnim.start(({ finished }) => {
+      if (!finished) return;
+      setDisplayedKey(activeKey);
+      translateY.setValue(-14);
+      opacity.setValue(0);
+
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 240,
+          easing: FLUID_EASE,
+          useNativeDriver: NATIVE_DRIVER,
+        }),
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: 260,
+          easing: FLUID_EASE,
+          useNativeDriver: NATIVE_DRIVER,
+        }),
+      ]).start();
+    });
+
+    return () => exitAnim.stop();
+  }, [activeKey, displayedKey, opacity, translateY]);
 
   return (
     <View style={[styles.transitionClip, style]}>
       <Animated.View
         style={[
           styles.transitionFill,
-          { opacity: enterOpacity, transform: [{ translateX: enterX }] },
+          { opacity, transform: [{ translateY }] },
         ]}
       >
-        {children}
+        {renderScreen(displayedKey)}
       </Animated.View>
     </View>
   );
-};
+}
 
 /**
  * Fade ultraleve para troca de abas (zero deslocamento, zero piscar).
@@ -215,9 +320,9 @@ export const WizardProgressBar: React.FC<{
   const translateX =
     trackWidth > 0
       ? progress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-trackWidth, 0],
-        })
+        inputRange: [0, 1],
+        outputRange: [-trackWidth, 0],
+      })
       : 0;
 
   return (
@@ -264,8 +369,9 @@ export const AnimatedValueText: React.FC<{
   valueKey: string;
   style?: StyleProp<TextStyle>;
   numberOfLines?: number;
+  inline?: boolean;
   children: React.ReactNode;
-}> = ({ valueKey, style, numberOfLines = 1, children }) => {
+}> = ({ valueKey, style, numberOfLines = 1, inline = false, children }) => {
   const opacity = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;
   const firstRender = useRef(true);
@@ -296,7 +402,7 @@ export const AnimatedValueText: React.FC<{
   return (
     <Animated.View
       style={[
-        styles.valueTextWrap,
+        inline ? styles.valueTextWrapInline : styles.valueTextWrap,
         { opacity, transform: [{ translateY }] },
       ]}
     >
@@ -599,6 +705,10 @@ const styles = StyleSheet.create({
   },
   valueTextWrap: {
     flex: 1,
+  },
+  valueTextWrapInline: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   overlayRoot: {
     flex: 1,
