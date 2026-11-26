@@ -1,8 +1,10 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { Camera, Check, Link2, RefreshCw } from "lucide-react-native";
+import { ehUriFotoReal } from "../../../domain/rules/watermarkRules";
 import { ARPE_COLORS } from "../../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../../theme/tokens";
+import { FotoWatermarkStamp } from "../camera/FotoWatermarkStamp";
 import {
   AnimatedModalBox,
   AnimatedScalePressable,
@@ -13,6 +15,8 @@ export interface SimulatedPhotoDraft {
   readonly nomeArquivo: string;
   readonly horario: string;
   readonly tamanhoKb: number;
+  readonly localUri?: string;
+  readonly watermarkLinhas?: readonly string[];
 }
 
 interface FotoPreviewModalProps {
@@ -26,6 +30,8 @@ interface FotoPreviewModalProps {
   onClose: () => void;
 }
 
+const PREVIEW_SIDE_PX = 264;
+
 export const FotoPreviewModal: React.FC<FotoPreviewModalProps> = ({
   visible,
   photoDraft,
@@ -35,78 +41,116 @@ export const FotoPreviewModal: React.FC<FotoPreviewModalProps> = ({
   onRelacionar,
   onConfirmar,
   onClose,
-}) => (
-  <AnimatedModalBox
-    visible={visible && photoDraft !== null}
-    variant="center"
-    cardStyle={styles.card}
-    onClose={onClose}
-  >
-    {photoDraft && (
-      <>
-        <Text style={styles.kicker}>PRÉ-VISUALIZAÇÃO DA EVIDÊNCIA</Text>
-        <Text style={styles.title}>Confira a foto capturada</Text>
+}) => {
+  const temFotoReal = ehUriFotoReal(photoDraft?.localUri);
 
-        <FadeSlideView
-          animKey={`${photoDraft.nomeArquivo}-${photoDraft.horario}`}
-          distance={6}
-          duration={180}
-          style={[styles.previewFrame, { borderColor: accentColor }]}
-        >
-          <View style={[styles.simulatedBadge, { backgroundColor: accentColor }]}>
-            <Camera size={14} color={ARPE_COLORS.white} />
-            <Text style={styles.simulatedBadgeText}>CAPTURA SIMULADA</Text>
-          </View>
+  return (
+    <AnimatedModalBox
+      visible={visible && photoDraft !== null}
+      variant="center"
+      cardStyle={styles.card}
+      onClose={onClose}
+    >
+      {photoDraft && (
+        <>
+          <Text style={styles.kicker}>PRÉ-VISUALIZAÇÃO DA EVIDÊNCIA (1:1)</Text>
+          <Text style={styles.title}>Confira a foto capturada</Text>
 
-          <View style={styles.centerCrosshair}>
-            <Camera size={38} color={accentColor} />
-            <Text style={styles.fileName}>{photoDraft.nomeArquivo}</Text>
-            <Text style={styles.metaText}>
-              1600×1200 px · {photoDraft.tamanhoKb} KB · {photoDraft.horario}
-            </Text>
-          </View>
-        </FadeSlideView>
-
-        <Text style={styles.helperText}>
-          {temOcorrenciaElegivel
-            ? "Confirme para criar uma nova NC/PA ou relacione esta foto como 2ª imagem de uma ocorrência existente."
-            : "Ao confirmar, você irá classificar se o registro é Não Conformidade (NC) ou Ponto de Atenção (PA)."}
-        </Text>
-
-        {temOcorrenciaElegivel && (
-          <AnimatedScalePressable
-            onPress={onRelacionar}
-            style={[styles.relateBtn, { borderColor: accentColor }]}
+          <FadeSlideView
+            animKey={`${photoDraft.nomeArquivo}-${photoDraft.horario}`}
+            distance={6}
+            duration={180}
+            style={styles.previewWrap}
           >
-            <Link2 size={16} color={accentColor} />
-            <Text style={[styles.relateBtnText, { color: accentColor }]}>
-              Relacionar com ocorrência existente
-            </Text>
-          </AnimatedScalePressable>
-        )}
-
-        <View style={styles.actionsRow}>
-          <View style={styles.secondaryCol}>
-            <AnimatedScalePressable onPress={onRefazer} style={styles.secondaryBtn}>
-              <RefreshCw size={16} color={ARPE_COLORS.textSecondary} />
-              <Text style={styles.secondaryBtnText}>Refazer</Text>
-            </AnimatedScalePressable>
-          </View>
-
-          <View style={styles.confirmCol}>
-            <AnimatedScalePressable
-              onPress={onConfirmar}
-              style={[styles.confirmBtn, { backgroundColor: accentColor }]}
+            <View
+              style={[
+                styles.previewSquare,
+                {
+                  width: PREVIEW_SIDE_PX,
+                  height: PREVIEW_SIDE_PX,
+                  borderColor: accentColor,
+                },
+              ]}
             >
-              <Check size={17} color={ARPE_COLORS.white} />
-              <Text style={styles.confirmBtnText}>Confirmar Foto</Text>
+              {temFotoReal ? (
+                <Image
+                  source={{ uri: photoDraft.localUri }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.centerCrosshair}>
+                  <Camera size={38} color={accentColor} />
+                  <Text style={styles.fileName}>{photoDraft.nomeArquivo}</Text>
+                  {photoDraft.watermarkLinhas && (
+                    <FotoWatermarkStamp
+                      linhas={photoDraft.watermarkLinhas}
+                      canvasSidePx={PREVIEW_SIDE_PX}
+                    />
+                  )}
+                </View>
+              )}
+
+              <View
+                style={[styles.badgeOverlay, { backgroundColor: accentColor }]}
+              >
+                <Camera size={12} color={ARPE_COLORS.white} />
+                <Text style={styles.badgeOverlayText}>
+                  {temFotoReal ? "FOTO 1:1 · SANDBOX PRIVADO" : "PRÉVIA 1:1"}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.metaText}>
+              {photoDraft.nomeArquivo} · {photoDraft.tamanhoKb} KB ·{" "}
+              {photoDraft.horario}
+            </Text>
+          </FadeSlideView>
+
+          <Text style={styles.helperText}>
+            {temOcorrenciaElegivel
+              ? "Confirme para criar uma nova NC/PA ou relacione esta foto como 2ª imagem de uma ocorrência existente."
+              : "Ao confirmar, você irá classificar se o registro é Não Conformidade (NC) ou Ponto de Atenção (PA)."}
+          </Text>
+
+          {temOcorrenciaElegivel && (
+            <AnimatedScalePressable
+              onPress={onRelacionar}
+              style={[styles.relateBtn, { borderColor: accentColor }]}
+            >
+              <Link2 size={16} color={accentColor} />
+              <Text style={[styles.relateBtnText, { color: accentColor }]}>
+                Relacionar com ocorrência existente
+              </Text>
             </AnimatedScalePressable>
+          )}
+
+          <View style={styles.actionsRow}>
+            <View style={styles.secondaryCol}>
+              <AnimatedScalePressable
+                onPress={onRefazer}
+                style={styles.secondaryBtn}
+              >
+                <RefreshCw size={16} color={ARPE_COLORS.textSecondary} />
+                <Text style={styles.secondaryBtnText}>Refazer</Text>
+              </AnimatedScalePressable>
+            </View>
+
+            <View style={styles.confirmCol}>
+              <AnimatedScalePressable
+                onPress={onConfirmar}
+                style={[styles.confirmBtn, { backgroundColor: accentColor }]}
+              >
+                <Check size={17} color={ARPE_COLORS.white} />
+                <Text style={styles.confirmBtnText}>Confirmar Foto</Text>
+              </AnimatedScalePressable>
+            </View>
           </View>
-        </View>
-      </>
-    )}
-  </AnimatedModalBox>
-);
+        </>
+      )}
+    </AnimatedModalBox>
+  );
+};
 
 const styles = StyleSheet.create({
   card: {
@@ -128,25 +172,30 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: ARPE_COLORS.textPrimary,
   },
-  previewFrame: {
-    height: 196,
+  previewWrap: {
+    alignItems: "center",
+    gap: 8,
+  },
+  previewSquare: {
     borderRadius: RADII.lg,
     borderWidth: 2,
-    backgroundColor: ARPE_COLORS.surfaceMuted,
-    padding: SPACING.md,
-    justifyContent: "space-between",
+    backgroundColor: "#111827",
+    overflow: "hidden",
+    position: "relative",
   },
-  simulatedBadge: {
-    alignSelf: "flex-start",
+  badgeOverlay: {
+    position: "absolute",
+    top: 8,
+    left: 8,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: RADII.pill,
   },
-  simulatedBadgeText: {
-    fontSize: 10.5,
+  badgeOverlayText: {
+    fontSize: 10,
     fontWeight: "800",
     color: ARPE_COLORS.white,
   },
@@ -157,12 +206,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   fileName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "800",
-    color: ARPE_COLORS.textPrimary,
+    color: ARPE_COLORS.white,
   },
   metaText: {
     fontSize: 12,
+    fontWeight: "600",
     color: ARPE_COLORS.textSecondary,
   },
   helperText: {

@@ -40,6 +40,24 @@ export interface FotoMidiaEntity {
   readonly ocorrenciaNumero?: number;
 }
 
+/**
+ * Acervo independente salvo na pasta privada da galeria do app (sandbox://galeria/).
+ * Imune à exclusão de vistorias; removido apenas por ação explícita na aba Galeria.
+ */
+export interface GaleriaFotoEntity {
+  readonly id: string;
+  readonly vistoriaId: string | null;
+  readonly idFiscalizacao: string | null;
+  readonly tipoRelatorio: TipoRelatorio;
+  readonly categoriaRelatorio: CategoriaRelatorio;
+  readonly local: string;
+  readonly nomeArquivo: string;
+  readonly localUri: string;
+  readonly tamanhoKb: number;
+  readonly capturadaEm: string;
+  readonly ocorrenciaNumero?: number;
+}
+
 export interface OcorrenciaEntity {
   readonly numero: number;
   readonly idFiscalizacao: string;
@@ -64,6 +82,9 @@ export interface OcorrenciaEntity {
 
 export interface VistoriaSessionEntity {
   readonly id: string;
+  readonly autorId?: string;
+  readonly autorUsuario?: string;
+  readonly autorNome?: string;
   readonly tipoRelatorio: TipoRelatorio;
   readonly categoriaRelatorio: CategoriaRelatorio;
   readonly lifecycleStatus: SessionLifecycleStatus;

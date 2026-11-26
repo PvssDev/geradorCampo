@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ArrowLeft, FolderOpen, Images, Smartphone, X } from "lucide-react-native";
-import { FotoMidiaEntity } from "../../../domain/entities/types";
 import { ARPE_COLORS } from "../../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../../theme/tokens";
 import {
@@ -12,9 +11,17 @@ import {
 import { SimulatedPhotoThumb } from "../common/SimulatedPhotoThumb";
 import { SimulatedPhotoDraft } from "./FotoPreviewModal";
 
+export interface AcervoFotoOption {
+  readonly id: string;
+  readonly nomeArquivo: string;
+  readonly localUri: string;
+  readonly tamanhoKb: number;
+  readonly capturadaEm: string;
+}
+
 interface EscolherFotoOrigemModalProps {
   visible: boolean;
-  fotosGaleriaApp: readonly FotoMidiaEntity[];
+  fotosGaleriaApp: readonly AcervoFotoOption[];
   accentColor: string;
   accentSoft: string;
   onClose: () => void;
@@ -50,12 +57,13 @@ export const EscolherFotoOrigemModal: React.FC<EscolherFotoOrigemModalProps> = (
     });
   };
 
-  const handlePickFromAppGallery = (foto: FotoMidiaEntity) => {
+  const handlePickFromAppGallery = (foto: AcervoFotoOption) => {
     setModoGaleriaApp(false);
     onSelectPhoto({
       nomeArquivo: foto.nomeArquivo,
       horario: foto.capturadaEm,
       tamanhoKb: foto.tamanhoKb,
+      localUri: foto.localUri,
     });
   };
 
@@ -145,6 +153,7 @@ export const EscolherFotoOrigemModal: React.FC<EscolherFotoOrigemModalProps> = (
                 >
                   <SimulatedPhotoThumb
                     nomeArquivo={f.nomeArquivo}
+                    localUri={f.localUri}
                     accentColor={accentColor}
                     accentSoft={accentSoft}
                     size={64}

@@ -16,15 +16,18 @@ import {
 } from "../../../domain/config/concessionConfig";
 import {
   CategoriaRelatorio,
+  FotoMidiaEntity,
   OcorrenciaEntity,
   SituacaoNC,
   TipoAchado,
   TipoRelatorio,
 } from "../../../domain/entities/types";
 import {
+  FotoOcorrenciaAlvo,
   obterSiglasPorConcessao,
   sugerirCodificacaoPorConcessao,
 } from "../../../domain/rules/domainRules";
+import { resolverUriPorNomeArquivo } from "../../../domain/rules/watermarkRules";
 import { ARPE_COLORS } from "../../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../../theme/tokens";
 import { toast } from "../../../application/store/useToastStore";
@@ -54,9 +57,21 @@ interface ClassificarOcorrenciaModalProps {
   localSessao: string;
   proximoSequencial: number;
   photoDraft: SimulatedPhotoDraft | null;
+  fotosVistoria?: readonly FotoMidiaEntity[];
+  editingOcorrencia?: OcorrenciaEntity | null;
+  editingTarget?: FotoOcorrenciaAlvo;
   accentColor: string;
   onClose: () => void;
   onSalvar: (ocorrencia: Omit<OcorrenciaEntity, "numero" | "idFiscalizacao">) => void;
+  onSalvarEdicaoRelacionada?: (params: {
+    sigla: TipoAchado;
+    siglas?: readonly string[];
+    faixa?: string;
+    setorPredial?: string;
+    codificacao?: string;
+    fundamento: string;
+    determinacao: string;
+  }) => void;
 }
 
 export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProps> = ({
@@ -66,12 +81,28 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
   localSessao,
   proximoSequencial,
   photoDraft,
+  fotosVistoria = [],
+  editingOcorrencia = null,
+  editingTarget = "principal",
   accentColor,
   onClose,
   onSalvar,
+  onSalvarEdicaoRelacionada,
 }) => {
   const cfg = CONCESSION_CONFIG[tipoRelatorio];
   const isMonitoring = categoriaRelatorio === "Monitoramento";
+  const isEditing = Boolean(editingOcorrencia);
+  const isEditingRelated =
+    isEditing && editingTarget === "relacionada" && Boolean(editingOcorrencia?.relacionamento);
+  const temRelacaoCompartilhada = Boolean(editingOcorrencia?.relacionamento);
+  const fotoBannerNome = photoDraft
+    ? photoDraft.nomeArquivo
+    : isEditingRelated
+      ? editingOcorrencia?.relacionamento?.fotoRelacionadaNome
+      : editingOcorrencia?.fotoAtualNome;
+  const fotoBannerUri =
+    photoDraft?.localUri ??
+    resolverUriPorNomeArquivo(fotosVistoria, fotoBannerNome);
   const anoAtual = new Date().getFullYear();
   const optionsSiglas = obterSiglasPorConcessao(tipoRelatorio);
 
@@ -91,20 +122,54 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
   const [erro, setErro] = useState<string>("");
 
   useEffect(() => {
-    if (visible) {
-      setTipoAchado("NC");
-      setCodificacao("");
-      setSiglas([]);
-      setFundamento("");
-      setDeterminacao("");
-      setSituacao("Pendente");
-      setLegendaFoto("");
-      setPosConcessionaria("");
-      setConstatacao("");
-      setAnaliseArpe("");
-      setErro("");
+    if (!visible) return;
+    setErro("");
+
+    if (editingOcorrencia) {
+      const rel = editingOcorrencia.relacionamento;
+      if (editingTarget === "relacionada" && rel) {
+        setTipoAchado(rel.sigla);
+        setDirecaoFaixa(
+          rel.faixa === "Esquerda" ? "Esquerda" : "Direita"
+        );
+        setCodificacao(rel.codificacao ?? "");
+        setSiglas(rel.siglas ? [...rel.siglas] : []);
+      } else {
+        setTipoAchado(editingOcorrencia.tipoAchado);
+        setPista(editingOcorrencia.pista ?? "Sul");
+        setTrecho(editingOcorrencia.trecho ?? "");
+        setDirecaoFaixa(
+          editingOcorrencia.direcaoFaixa === "Esquerda" ? "Esquerda" : "Direita"
+        );
+        setCodificacao(editingOcorrencia.codificacao ?? "");
+        const siglasParsed = editingOcorrencia.constatacao
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => optionsSiglas.includes(s));
+        setSiglas(siglasParsed);
+      }
+
+      setFundamento(editingOcorrencia.analiseArpe);
+      setDeterminacao(editingOcorrencia.determinacaoOuInfo);
+      setSituacao(editingOcorrencia.situacao);
+      setLegendaFoto(editingOcorrencia.legendaAnterior ?? "");
+      setPosConcessionaria(editingOcorrencia.determinacaoOuInfo);
+      setConstatacao(editingOcorrencia.constatacao);
+      setAnaliseArpe(editingOcorrencia.analiseArpe);
+      return;
     }
-  }, [visible, tipoRelatorio]);
+
+    setTipoAchado("NC");
+    setCodificacao("");
+    setSiglas([]);
+    setFundamento("");
+    setDeterminacao("");
+    setSituacao("Pendente");
+    setLegendaFoto("");
+    setPosConcessionaria("");
+    setConstatacao("");
+    setAnaliseArpe("");
+  }, [visible, tipoRelatorio, editingOcorrencia, editingTarget]);
 
   const toggleSigla = (s: string) => {
     setSiglas((prev) =>
@@ -114,6 +179,22 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
   };
 
   const handleConfirmar = () => {
+    if (isEditingRelated && onSalvarEdicaoRelacionada) {
+      onSalvarEdicaoRelacionada({
+        sigla: tipoAchado,
+        siglas: siglas.length > 0 ? siglas : undefined,
+        faixa: tipoRelatorio === "CRA" ? direcaoFaixa : undefined,
+        setorPredial:
+          tipoRelatorio === "SOCICAM"
+            ? editingOcorrencia?.relacionamento?.setorPredial
+            : undefined,
+        codificacao: codificacao.trim() || undefined,
+        fundamento: fundamento.trim(),
+        determinacao: determinacao.trim(),
+      });
+      return;
+    }
+
     if (isMonitoring) {
       if (!posConcessionaria.trim() || !constatacao.trim() || !analiseArpe.trim()) {
         const msg = `Preencha ${cfg.labelPosicionamento}, Constatação em Campo e Análise Regulatória.`;
@@ -135,7 +216,7 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
         constatacao: constatacao.trim(),
         analiseArpe: analiseArpe.trim(),
         situacao,
-        fotoAtualNome: photoDraft?.nomeArquivo,
+        fotoAtualNome: photoDraft?.nomeArquivo ?? editingOcorrencia?.fotoAtualNome,
         legendaAnterior: legendaFoto.trim() || undefined,
       });
       return;
@@ -154,7 +235,7 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
     const descAuto =
       siglas.length > 0
         ? siglas.map((s) => `${s} (${(MAP_SIGLAS_OFICIAL[s] || s).toLowerCase()})`).join("; ")
-        : identFinal;
+        : editingOcorrencia?.descricao || identFinal;
 
     onSalvar({
       tipoAchado,
@@ -169,7 +250,7 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
       constatacao: siglas.join(", ") || identFinal,
       analiseArpe: fundamento.trim(),
       situacao: "Pendente",
-      fotoAtualNome: photoDraft?.nomeArquivo,
+      fotoAtualNome: photoDraft?.nomeArquivo ?? editingOcorrencia?.fotoAtualNome,
     });
   };
 
@@ -178,10 +259,14 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
       <View style={styles.topRow}>
         <View>
           <Text style={styles.kicker}>
-            {isMonitoring ? "AUDITORIA DE MONITORAMENTO" : `REGISTRO DE OCORRÊNCIA · ${tipoRelatorio}`}
+            {isEditing
+              ? `EDITAR OCORRÊNCIA #${String(editingOcorrencia?.numero ?? 0).padStart(2, "0")} · ${tipoRelatorio}`
+              : isMonitoring
+                ? "AUDITORIA DE MONITORAMENTO"
+                : `REGISTRO DE OCORRÊNCIA · ${tipoRelatorio}`}
           </Text>
           <Text style={styles.title}>
-            {isMonitoring ? "Auditoria da NC" : "Dados do Registro"}
+            {isMonitoring && !isEditing ? "Auditoria da NC" : "Dados do Registro"}
           </Text>
         </View>
         <Pressable onPress={onClose} style={styles.closeBtn}>
@@ -189,10 +274,11 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
         </Pressable>
       </View>
 
-      {photoDraft && (
+      {fotoBannerNome && (
         <FadeSlideView delay={30} distance={6} style={styles.photoConfirmedBanner}>
           <SimulatedPhotoThumb
-            nomeArquivo={photoDraft.nomeArquivo}
+            nomeArquivo={fotoBannerNome}
+            localUri={fotoBannerUri}
             accentColor={accentColor}
             accentSoft={ARPE_COLORS.surfaceMuted}
             size={48}
@@ -200,12 +286,16 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
           <View style={styles.photoBannerTextWrap}>
             <View style={styles.photoBannerTitleRow}>
               <ImageIcon size={14} color={ARPE_COLORS.statusSanada} />
-              <Text style={styles.photoConfirmedText}>
-                Foto confirmada: {photoDraft.nomeArquivo}
+              <Text style={styles.photoConfirmedText} numberOfLines={1}>
+                {photoDraft
+                  ? `Foto confirmada: ${fotoBannerNome}`
+                  : `Foto: ${fotoBannerNome}`}
               </Text>
             </View>
             <Text style={styles.photoBannerSub}>
-              {photoDraft.tamanhoKb} KB · {photoDraft.horario} · Sandbox local
+              {photoDraft
+                ? `${photoDraft.tamanhoKb} KB · ${photoDraft.horario} · Sandbox local`
+                : "Evidência vinculada · Sandbox local"}
             </Text>
           </View>
         </FadeSlideView>
@@ -239,26 +329,30 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
 
           {tipoRelatorio !== "SOCICAM" && (
             <>
-              <ChipSelectorGroup
-                label="Pista"
-                options={PISTAS_SUGESTOES}
-                value={pista}
-                onChange={setPista}
-                accentColor={accentColor}
-              />
+              {!isEditingRelated && (
+                <>
+                  <ChipSelectorGroup
+                    label="Pista"
+                    options={PISTAS_SUGESTOES}
+                    value={pista}
+                    onChange={setPista}
+                    accentColor={accentColor}
+                  />
 
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>
-                  {tipoRelatorio === "CRA" ? "TRECHO / ESTACA" : "TRECHO / KM"}
-                </Text>
-                <TextInput
-                  value={trecho}
-                  onChangeText={setTrecho}
-                  placeholder={tipoRelatorio === "CRA" ? "Ex.: PE-009 · KM 24+500" : "Ex.: PE-024 · KM 04+200"}
-                  placeholderTextColor={ARPE_COLORS.textMuted}
-                  style={styles.input}
-                />
-              </View>
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>
+                      {tipoRelatorio === "CRA" ? "TRECHO / ESTACA" : "TRECHO / KM"}
+                    </Text>
+                    <TextInput
+                      value={trecho}
+                      onChangeText={setTrecho}
+                      placeholder={tipoRelatorio === "CRA" ? "Ex.: PE-009 · KM 24+500" : "Ex.: PE-024 · KM 04+200"}
+                      placeholderTextColor={ARPE_COLORS.textMuted}
+                      style={styles.input}
+                    />
+                  </View>
+                </>
+              )}
 
               {tipoRelatorio === "CRA" && (
                 <ChipSelectorGroup
@@ -351,7 +445,14 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
               )}
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>FUNDAMENTO DA INFRAÇÃO</Text>
+                <View style={styles.labelWithAction}>
+                  <Text style={styles.label}>FUNDAMENTO DA INFRAÇÃO</Text>
+                  {temRelacaoCompartilhada && (
+                    <Text style={[styles.sharedTag, { color: accentColor }]}>
+                      Compartilhado (2 fotos)
+                    </Text>
+                  )}
+                </View>
                 <TextInput
                   value={fundamento}
                   onChangeText={setFundamento}
@@ -363,7 +464,14 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>DETERMINAÇÃO / PRAZO</Text>
+                <View style={styles.labelWithAction}>
+                  <Text style={styles.label}>DETERMINAÇÃO / PRAZO</Text>
+                  {temRelacaoCompartilhada && (
+                    <Text style={[styles.sharedTag, { color: accentColor }]}>
+                      Compartilhado (2 fotos)
+                    </Text>
+                  )}
+                </View>
                 <TextInput
                   value={determinacao}
                   onChangeText={setDeterminacao}
@@ -435,7 +543,9 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
         style={[styles.saveBtn, { backgroundColor: accentColor }]}
       >
         <Check size={18} color={ARPE_COLORS.white} />
-        <Text style={styles.saveBtnText}>Salvar Ocorrência</Text>
+        <Text style={styles.saveBtnText}>
+          {isEditing ? "Salvar Alterações" : "Salvar Ocorrência"}
+        </Text>
       </AnimatedScalePressable>
     </AnimatedModalBox>
   );
@@ -483,6 +593,7 @@ const styles = StyleSheet.create({
   labelWithAction: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   suggestBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 2 },
   suggestText: { fontSize: 11.5, fontWeight: "800" },
+  sharedTag: { fontSize: 10.5, fontWeight: "700" },
   selectedSiglasBox: {
     padding: 10,
     borderRadius: RADII.md,

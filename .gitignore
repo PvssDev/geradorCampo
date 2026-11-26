@@ -32,6 +32,8 @@ Thumbs.db
 
 # Agentes IA / Skills locais
 .agents/
+ref/
+supabase/migrations/002_seed_test_users.sql
 __pycache__/
 *.pyc
 

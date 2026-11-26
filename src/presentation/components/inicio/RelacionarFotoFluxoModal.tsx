@@ -13,6 +13,7 @@ import {
   DIRECOES_CRA,
 } from "../../../domain/config/concessionConfig";
 import {
+  FotoMidiaEntity,
   OcorrenciaEntity,
   TipoAchado,
   TipoRelatorio,
@@ -21,6 +22,7 @@ import {
   obterSiglasPorConcessao,
   podeRelacionarOcorrencia,
 } from "../../../domain/rules/domainRules";
+import { resolverUriPorNomeArquivo } from "../../../domain/rules/watermarkRules";
 import { ARPE_COLORS } from "../../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../../theme/tokens";
 import { toast } from "../../../application/store/useToastStore";
@@ -42,6 +44,7 @@ interface RelacionarFotoFluxoModalProps {
   visible: boolean;
   photoDraft: SimulatedPhotoDraft | null;
   ocorrencias: readonly OcorrenciaEntity[];
+  fotosVistoria?: readonly FotoMidiaEntity[];
   tipoRelatorio: TipoRelatorio;
   accentColor: string;
   accentSoft: string;
@@ -54,6 +57,8 @@ interface RelacionarFotoFluxoModalProps {
     setorPredial?: string;
     codificacao?: string;
     fotoRelacionadaNome: string;
+    fotoRelacionadaUri?: string;
+    fotoRelacionadaTamanhoKb?: number;
   }) => { ok: true } | { ok: false; erro: string };
 }
 
@@ -61,6 +66,7 @@ export const RelacionarFotoFluxoModal: React.FC<RelacionarFotoFluxoModalProps> =
   visible,
   photoDraft,
   ocorrencias,
+  fotosVistoria = [],
   tipoRelatorio,
   accentColor,
   accentSoft,
@@ -112,6 +118,8 @@ export const RelacionarFotoFluxoModal: React.FC<RelacionarFotoFluxoModalProps> =
           : undefined,
       codificacao: codificacao.trim() || undefined,
       fotoRelacionadaNome: photoDraft.nomeArquivo,
+      fotoRelacionadaUri: photoDraft.localUri,
+      fotoRelacionadaTamanhoKb: photoDraft.tamanhoKb,
     });
     if (!res.ok) {
       setErro(res.erro);
@@ -171,6 +179,7 @@ export const RelacionarFotoFluxoModal: React.FC<RelacionarFotoFluxoModalProps> =
               >
                 <SimulatedPhotoThumb
                   nomeArquivo={oc.fotoAtualNome}
+                  localUri={resolverUriPorNomeArquivo(fotosVistoria, oc.fotoAtualNome)}
                   accentColor={accentColor}
                   accentSoft={accentSoft}
                   size={54}
@@ -195,6 +204,7 @@ export const RelacionarFotoFluxoModal: React.FC<RelacionarFotoFluxoModalProps> =
             <View style={styles.photoSlot}>
               <SimulatedPhotoThumb
                 nomeArquivo={alvo.fotoAtualNome}
+                localUri={resolverUriPorNomeArquivo(fotosVistoria, alvo.fotoAtualNome)}
                 accentColor={accentColor}
                 accentSoft={accentSoft}
                 size={68}
@@ -208,6 +218,7 @@ export const RelacionarFotoFluxoModal: React.FC<RelacionarFotoFluxoModalProps> =
             <View style={styles.photoSlot}>
               <SimulatedPhotoThumb
                 nomeArquivo={photoDraft?.nomeArquivo}
+                localUri={photoDraft?.localUri}
                 accentColor={accentColor}
                 accentSoft={accentSoft}
                 size={68}

@@ -47,65 +47,100 @@ const VARIANT_META: Record<
   },
 };
 
-const ToastCard: React.FC<{ item: ToastItem; onDismiss: (id: string) => void }> = ({
-  item,
-  onDismiss,
-}) => {
-  const anim = useRef(new Animated.Value(0)).current;
+const ToastCard: React.FC<{
+  item: ToastItem;
+  depth: number;
+  zIndex: number;
+  onDismiss: (id: string) => void;
+}> = ({ item, depth, zIndex, onDismiss }) => {
+  const enterAnim = useRef(new Animated.Value(0)).current;
+  const depthAnim = useRef(new Animated.Value(depth)).current;
   const meta = VARIANT_META[item.variant];
   const Icon = meta.icon;
 
   useEffect(() => {
-    Animated.timing(anim, {
+    Animated.timing(enterAnim, {
       toValue: 1,
       duration: 210,
       easing: FLUID_EASE,
       useNativeDriver: NATIVE_DRIVER,
     }).start();
-  }, [anim]);
+  }, [enterAnim]);
 
-  const translateY = anim.interpolate({
+  useEffect(() => {
+    Animated.timing(depthAnim, {
+      toValue: depth,
+      duration: 220,
+      easing: FLUID_EASE,
+      useNativeDriver: NATIVE_DRIVER,
+    }).start();
+  }, [depth, depthAnim]);
+
+  const enterY = enterAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [-14, 0],
   });
-  const scale = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.96, 1],
+  const depthY = depthAnim.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [0, 8, 16],
+    extrapolate: "clamp",
+  });
+  const depthScale = depthAnim.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [1, 0.95, 0.9],
+    extrapolate: "clamp",
+  });
+  const depthOpacity = depthAnim.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [1, 0.78, 0.55],
+    extrapolate: "clamp",
   });
 
   return (
     <Animated.View
+      pointerEvents={depth === 0 ? "auto" : "none"}
       style={[
-        styles.card,
+        styles.cardSlot,
         {
-          borderColor: meta.border,
-          opacity: anim,
-          transform: [{ translateY }, { scale }],
+          zIndex,
+          opacity: enterAnim,
+          transform: [{ translateY: enterY }],
         },
       ]}
     >
-      <View style={[styles.iconBadge, { backgroundColor: meta.soft }]}>
-        <Icon size={17} color={meta.color} />
-      </View>
-
-      <View style={styles.textWrap}>
-        <Text style={styles.title} numberOfLines={2}>
-          {item.title}
-        </Text>
-        {item.description && (
-          <Text style={styles.description} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
-      </View>
-
-      <Pressable
-        onPress={() => onDismiss(item.id)}
-        hitSlop={8}
-        style={styles.closeBtn}
+      <Animated.View
+        style={[
+          styles.card,
+          {
+            borderColor: meta.border,
+            opacity: depthOpacity,
+            transform: [{ translateY: depthY }, { scale: depthScale }],
+          },
+        ]}
       >
-        <X size={14} color={ARPE_COLORS.textMuted} />
-      </Pressable>
+        <View style={[styles.iconBadge, { backgroundColor: meta.soft }]}>
+          <Icon size={17} color={meta.color} />
+        </View>
+
+        <View style={styles.textWrap}>
+          <Text style={styles.title} numberOfLines={2}>
+            {item.title}
+          </Text>
+          {item.description && (
+            <Text style={styles.description} numberOfLines={2}>
+              {item.description}
+            </Text>
+          )}
+        </View>
+
+        <Pressable
+          onPress={() => onDismiss(item.id)}
+          hitSlop={8}
+          style={styles.closeBtn}
+        >
+          <X size={14} color={ARPE_COLORS.textMuted} />
+        </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 };
@@ -125,8 +160,14 @@ export const ToastViewport: React.FC<{ inModal?: boolean }> = ({
       pointerEvents="box-none"
       style={[styles.viewport, { top: Math.max(insets.top, 12) + 8 }]}
     >
-      {toasts.map((item) => (
-        <ToastCard key={item.id} item={item} onDismiss={dismiss} />
+      {toasts.map((item, idx) => (
+        <ToastCard
+          key={item.id}
+          item={item}
+          depth={toasts.length - 1 - idx}
+          zIndex={idx + 1}
+          onDismiss={dismiss}
+        />
       ))}
     </View>
   );
@@ -139,7 +180,13 @@ const styles = StyleSheet.create({
     right: SPACING.lg,
     zIndex: 9999,
     alignItems: "center",
-    gap: 8,
+  },
+  cardSlot: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: "center",
   },
   card: {
     width: "100%",

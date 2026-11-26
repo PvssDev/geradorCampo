@@ -1,5 +1,6 @@
 import {
   CategoriaRelatorio,
+  GaleriaFotoEntity,
   TipoRelatorio,
 } from "../../domain/entities/types";
 
@@ -35,6 +36,9 @@ export const ARPE_COLORS = {
   statusOfflineSoft: "#fffbeb",
   statusOnline: "#10b981",
   statusOnlineSoft: "#ecfdf5",
+  danger: "#dc2626",
+  dangerSoft: "#fef2f2",
+  dangerBorder: "#fecaca",
 } as const;
 
 export function getConcessionTheme(
@@ -92,5 +96,20 @@ export function getConcessionTheme(
         onPrimary: "#ffffff",
       };
   }
+}
+
+const ORPHAN_PHOTO_THEME: ConcessionTheme = {
+  primary: "#64748b",
+  primarySoft: "#f1f5f9",
+  primaryBorder: "#cbd5e1",
+  onPrimary: "#ffffff",
+};
+
+/**
+ * Retorna a paleta da foto na Galeria: cor da modalidade se vinculada, ou cinza neutro se sem vistoria.
+ */
+export function getGaleriaFotoTheme(foto: GaleriaFotoEntity): ConcessionTheme {
+  if (foto.vistoriaId === null) return ORPHAN_PHOTO_THEME;
+  return getConcessionTheme(foto.tipoRelatorio, foto.categoriaRelatorio);
 }
 
