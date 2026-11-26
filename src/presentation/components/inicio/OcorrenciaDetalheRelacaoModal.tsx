@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   FlatList,
+  Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -12,10 +13,15 @@ import {
 import { Camera, Pencil, Trash2, X } from "lucide-react-native";
 import { CONCESSION_CONFIG } from "../../../domain/config/concessionConfig";
 import {
+  FotoMidiaEntity,
   OcorrenciaEntity,
   TipoRelatorio,
 } from "../../../domain/entities/types";
 import { FotoOcorrenciaAlvo } from "../../../domain/rules/domainRules";
+import {
+  ehUriFotoReal,
+  resolverUriPorNomeArquivo,
+} from "../../../domain/rules/watermarkRules";
 import { ARPE_COLORS } from "../../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../../theme/tokens";
 import {
@@ -28,6 +34,7 @@ import { ConfirmarExclusaoModal } from "../vistoria/ConfirmarExclusaoModal";
 interface OcorrenciaDetalheRelacaoModalProps {
   readonly visible: boolean;
   readonly ocorrencia: OcorrenciaEntity | null;
+  readonly fotosVistoria?: readonly FotoMidiaEntity[];
   readonly tipoRelatorio: TipoRelatorio;
   readonly accentColor: string;
   readonly accentSoft: string;
@@ -41,6 +48,7 @@ interface PhotoSlideItem {
   readonly alvo: FotoOcorrenciaAlvo;
   readonly label: string;
   readonly nomeArquivo: string;
+  readonly localUri?: string;
 }
 
 export const OcorrenciaDetalheRelacaoModal: React.FC<
@@ -48,6 +56,7 @@ export const OcorrenciaDetalheRelacaoModal: React.FC<
 > = ({
   visible,
   ocorrencia,
+  fotosVistoria = [],
   tipoRelatorio,
   accentColor,
   accentSoft,
@@ -76,6 +85,10 @@ export const OcorrenciaDetalheRelacaoModal: React.FC<
           alvo: "principal",
           label: ocorrencia.relacionamento ? "Foto 1" : "Foto",
           nomeArquivo: ocorrencia.fotoAtualNome || "Foto 1",
+          localUri: resolverUriPorNomeArquivo(
+            fotosVistoria,
+            ocorrencia.fotoAtualNome
+          ),
         },
         ...(ocorrencia.relacionamento
           ? [
@@ -84,6 +97,10 @@ export const OcorrenciaDetalheRelacaoModal: React.FC<
                 label: "Foto 2",
                 nomeArquivo:
                   ocorrencia.relacionamento.fotoRelacionadaNome || "Foto 2",
+                localUri: resolverUriPorNomeArquivo(
+                  fotosVistoria,
+                  ocorrencia.relacionamento.fotoRelacionadaNome
+                ),
               },
             ]
           : []),
@@ -159,65 +176,86 @@ export const OcorrenciaDetalheRelacaoModal: React.FC<
                     onScroll={handleScroll}
                     scrollEventThrottle={16}
                     onMomentumScrollEnd={handleScroll}
-                    renderItem={({ item, index }) => (
-                      <View
-                        style={[
-                          styles.photoSlide,
-                          {
-                            width: slideWidth,
-                            backgroundColor: accentSoft,
-                            borderColor: accentColor,
-                          },
-                        ]}
-                      >
-                        <View style={styles.slideHeader}>
-                          <View
-                            style={[
-                              styles.slideBadge,
-                              { backgroundColor: accentColor },
-                            ]}
-                          >
-                            <Text style={styles.slideBadgeText}>
-                              {item.label}
-                            </Text>
-                          </View>
-                          {slides.length > 1 && (
-                            <Text
+                    renderItem={({ item, index }) => {
+                      const temFotoReal = ehUriFotoReal(item.localUri);
+                      return (
+                        <View
+                          style={[
+                            styles.photoSlide,
+                            {
+                              width: slideWidth,
+                              backgroundColor: temFotoReal
+                                ? "#0f172a"
+                                : accentSoft,
+                              borderColor: accentColor,
+                            },
+                          ]}
+                        >
+                          {temFotoReal && (
+                            <Image
+                              source={{ uri: item.localUri }}
+                              style={StyleSheet.absoluteFill}
+                              resizeMode="contain"
+                            />
+                          )}
+
+                          <View style={styles.slideHeader}>
+                            <View
                               style={[
-                                styles.slideCounter,
-                                { color: accentColor },
+                                styles.slideBadge,
+                                { backgroundColor: accentColor },
                               ]}
                             >
-                              {index + 1} / {slides.length}
-                            </Text>
+                              <Text style={styles.slideBadgeText}>
+                                {item.label}
+                              </Text>
+                            </View>
+                            {slides.length > 1 && (
+                              <Text
+                                style={[
+                                  styles.slideCounter,
+                                  {
+                                    color: temFotoReal
+                                      ? ARPE_COLORS.white
+                                      : accentColor,
+                                  },
+                                ]}
+                              >
+                                {index + 1} / {slides.length}
+                              </Text>
+                            )}
+                          </View>
+
+                          {!temFotoReal && (
+                            <>
+                              <Camera
+                                size={48}
+                                color={accentColor}
+                                strokeWidth={1.6}
+                              />
+                              <Text
+                                style={[styles.slideFile, { color: accentColor }]}
+                                numberOfLines={1}
+                              >
+                                {item.nomeArquivo}
+                              </Text>
+                            </>
+                          )}
+
+                          {temRelacao && (
+                            <AnimatedScalePressable
+                              onPress={() => setConfirmKind(item.alvo)}
+                              style={styles.removePhotoLink}
+                            >
+                              <Trash2 size={12.5} color={ARPE_COLORS.danger} />
+                              <Text style={styles.removePhotoText}>
+                                Remover esta foto
+                              </Text>
+                            </AnimatedScalePressable>
                           )}
                         </View>
-
-                        <Camera
-                          size={48}
-                          color={accentColor}
-                          strokeWidth={1.6}
-                        />
-                        <Text
-                          style={[styles.slideFile, { color: accentColor }]}
-                          numberOfLines={1}
-                        >
-                          {item.nomeArquivo}
-                        </Text>
-
-                        {temRelacao && (
-                          <AnimatedScalePressable
-                            onPress={() => setConfirmKind(item.alvo)}
-                            style={styles.removePhotoLink}
-                          >
-                            <Trash2 size={12.5} color={ARPE_COLORS.danger} />
-                            <Text style={styles.removePhotoText}>
-                              Remover esta foto
-                            </Text>
-                          </AnimatedScalePressable>
-                        )}
-                      </View>
-                    )}
+                      );
+                    }}
                   />
                 )}
 

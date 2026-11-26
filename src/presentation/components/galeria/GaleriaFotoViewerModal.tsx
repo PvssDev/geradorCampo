@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Camera, Share2, Trash2, X } from "lucide-react-native";
 import { GaleriaFotoEntity } from "../../../domain/entities/types";
+import { ehUriFotoReal } from "../../../domain/rules/watermarkRules";
 import { ARPE_COLORS, getGaleriaFotoTheme } from "../../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../../theme/tokens";
 import {
@@ -21,6 +22,7 @@ import {
   FLUID_EASE,
   NATIVE_DRIVER,
 } from "../common/MotionPrimitives";
+import { ZoomablePhotoCanvas } from "./ZoomablePhotoCanvas";
 
 interface GaleriaFotoViewerModalProps {
   readonly fotos: readonly GaleriaFotoEntity[];
@@ -43,6 +45,7 @@ export const GaleriaFotoViewerModal: React.FC<GaleriaFotoViewerModalProps> = ({
   const [rendered, setRendered] = useState(visible);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [chromeVisible, setChromeVisible] = useState(true);
+  const [isZoomed, setIsZoomed] = useState(false);
 
   const openAnim = useRef(new Animated.Value(0)).current;
   const chromeAnim = useRef(new Animated.Value(1)).current;
@@ -55,6 +58,7 @@ export const GaleriaFotoViewerModal: React.FC<GaleriaFotoViewerModalProps> = ({
       );
       setCurrentIndex(idx);
       setChromeVisible(true);
+      setIsZoomed(false);
       chromeAnim.setValue(1);
       setRendered(true);
       openAnim.setValue(0);
@@ -127,6 +131,7 @@ export const GaleriaFotoViewerModal: React.FC<GaleriaFotoViewerModalProps> = ({
             keyExtractor={(item) => item.id}
             horizontal
             pagingEnabled
+            scrollEnabled={!isZoomed}
             showsHorizontalScrollIndicator={false}
             initialScrollIndex={safeIndex}
             getItemLayout={(_, index) => ({
@@ -139,6 +144,19 @@ export const GaleriaFotoViewerModal: React.FC<GaleriaFotoViewerModalProps> = ({
             onMomentumScrollEnd={handleScrollEnd}
             renderItem={({ item }) => {
               const itemTheme = getGaleriaFotoTheme(item);
+              const temFotoReal = ehUriFotoReal(item.localUri);
+              if (temFotoReal) {
+                return (
+                  <ZoomablePhotoCanvas
+                    uri={item.localUri}
+                    width={winWidth}
+                    height={winHeight}
+                    resetKey={`${fotoAtual.id}-${safeIndex}`}
+                    onSingleTap={() => setChromeVisible((prev) => !prev)}
+                    onZoomStateChange={setIsZoomed}
+                  />
+                );
+              }
               return (
                 <Pressable
                   onPress={() => setChromeVisible((prev) => !prev)}

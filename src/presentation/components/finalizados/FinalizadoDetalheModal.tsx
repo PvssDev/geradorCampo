@@ -4,6 +4,7 @@ import { RotateCcw, X } from "lucide-react-native";
 import { CONCESSION_CONFIG } from "../../../domain/config/concessionConfig";
 import { VistoriaSessionEntity } from "../../../domain/entities/types";
 import { resumirContagensVistoria } from "../../../domain/rules/domainRules";
+import { resolverUriPorNomeArquivo } from "../../../domain/rules/watermarkRules";
 import { ARPE_COLORS, getConcessionTheme } from "../../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../../theme/tokens";
 import {
@@ -11,6 +12,7 @@ import {
   AnimatedScalePressable,
   FadeSlideView,
 } from "../common/MotionPrimitives";
+import { SimulatedPhotoThumb } from "../common/SimulatedPhotoThumb";
 
 interface FinalizadoDetalheModalProps {
   readonly vistoria: VistoriaSessionEntity | null;
@@ -113,18 +115,33 @@ export const FinalizadoDetalheModal: React.FC<FinalizadoDetalheModalProps> = ({
             ) : (
               vistoria.ocorrencias.map((oc) => (
                 <View key={oc.numero} style={styles.ocCard}>
-                  <Text style={styles.ocTitle}>
-                    #{String(oc.numero).padStart(2, "0")} · {oc.tipoAchado} ·{" "}
-                    {oc.identificacao}
-                  </Text>
-                  <Text style={styles.ocDesc}>{oc.descricao}</Text>
-                  <Text style={styles.ocMeta}>
-                    {cfg.exibePistaFaixa
-                      ? [oc.pista ? `Pista ${oc.pista}` : "", oc.direcaoFaixa]
-                          .filter(Boolean)
-                          .join(" · ") || vistoria.fiscalizacao.local
-                      : oc.setorPredial || vistoria.fiscalizacao.local}
-                  </Text>
+                  <View style={styles.ocRow}>
+                    <SimulatedPhotoThumb
+                      nomeArquivo={oc.fotoAtualNome}
+                      localUri={resolverUriPorNomeArquivo(
+                        vistoria.fotos,
+                        oc.fotoAtualNome
+                      )}
+                      accentColor={theme.primary}
+                      accentSoft={theme.primarySoft}
+                      size={46}
+                      badgeText={oc.relacionamento ? "2x" : undefined}
+                    />
+                    <View style={styles.ocBody}>
+                      <Text style={styles.ocTitle}>
+                        #{String(oc.numero).padStart(2, "0")} · {oc.tipoAchado} ·{" "}
+                        {oc.identificacao}
+                      </Text>
+                      <Text style={styles.ocDesc}>{oc.descricao}</Text>
+                      <Text style={styles.ocMeta}>
+                        {cfg.exibePistaFaixa
+                          ? [oc.pista ? `Pista ${oc.pista}` : "", oc.direcaoFaixa]
+                              .filter(Boolean)
+                              .join(" · ") || vistoria.fiscalizacao.local
+                          : oc.setorPredial || vistoria.fiscalizacao.local}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               ))
             )}
@@ -265,6 +282,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: ARPE_COLORS.border,
     padding: SPACING.md,
+    gap: 3,
+  },
+  ocRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  ocBody: {
+    flex: 1,
     gap: 3,
   },
   ocTitle: { fontSize: 12, fontWeight: "800", color: ARPE_COLORS.textPrimary },

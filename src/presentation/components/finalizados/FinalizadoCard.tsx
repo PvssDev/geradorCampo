@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
-import { ChevronRight, PauseCircle, PlayCircle } from "lucide-react-native";
+import { ChevronRight, UploadCloud } from "lucide-react-native";
 import { VistoriaSessionEntity } from "../../../domain/entities/types";
 import { calcularProgressoSync } from "../../../domain/rules/domainRules";
 import { ARPE_COLORS, getConcessionTheme } from "../../theme/colors";
@@ -12,19 +12,29 @@ import {
   FLUID_EASE,
   useAnimatedColor,
 } from "../common/MotionPrimitives";
+import { UserAvatar } from "../common/UserAvatar";
 
 interface FinalizadoCardProps {
   readonly vistoria: VistoriaSessionEntity;
   readonly index: number;
   readonly onPress: (id: string) => void;
-  readonly onToggleStandby: (vistoria: VistoriaSessionEntity) => void;
+  readonly onRetrySync?: (vistoria: VistoriaSessionEntity) => void;
+  readonly autorDiscreto?: {
+    readonly nomeCompleto: string;
+    readonly usuario: string;
+  };
+  readonly statusOverrideLabel?: string;
+  readonly hideLocalControls?: boolean;
 }
 
 export const FinalizadoCard: React.FC<FinalizadoCardProps> = ({
   vistoria,
   index,
   onPress,
-  onToggleStandby,
+  onRetrySync,
+  autorDiscreto,
+  statusOverrideLabel,
+  hideLocalControls = false,
 }) => {
   const vTheme = getConcessionTheme(
     vistoria.tipoRelatorio,
@@ -32,16 +42,28 @@ export const FinalizadoCard: React.FC<FinalizadoCardProps> = ({
   );
   const prog = calcularProgressoSync(vistoria);
   const isSynced = vistoria.syncStatus === "synced";
-  const statusLabel = isSynced
-    ? "Sincronizado"
-    : vistoria.syncStandby
-      ? "Em Standby"
-      : "Pendente";
+  const isUploading = vistoria.syncStatus === "uploading";
+  const isError = vistoria.syncStatus === "error";
+  const statusLabel =
+    statusOverrideLabel ??
+    (isSynced
+      ? "Sincronizado"
+      : isUploading
+        ? "Enviando..."
+        : isError
+          ? "Falha no envio"
+          : vistoria.syncStandby
+            ? "Em Standby"
+            : "Pendente");
   const statusColor = isSynced
     ? ARPE_COLORS.statusSanada
-    : vistoria.syncStandby
-      ? "#64748b"
-      : ARPE_COLORS.statusOffline;
+    : isUploading
+      ? vTheme.primary
+      : isError
+        ? ARPE_COLORS.danger
+        : vistoria.syncStandby
+          ? "#64748b"
+          : ARPE_COLORS.statusOffline;
   const barTargetColor = isSynced
     ? ARPE_COLORS.statusSanada
     : vistoria.syncStandby
@@ -93,19 +115,28 @@ export const FinalizadoCard: React.FC<FinalizadoCardProps> = ({
               </Text>
             </View>
 
-            <FadeSlideView
-              animKey={statusLabel}
-              distance={4}
-              duration={160}
-              style={[
-                styles.statusBadge,
-                { backgroundColor: `${statusColor}18` },
-              ]}
-            >
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {statusLabel}
-              </Text>
-            </FadeSlideView>
+            <View style={styles.topRightRow}>
+              {autorDiscreto && (
+                <UserAvatar
+                  nomeCompleto={autorDiscreto.nomeCompleto}
+                  usuario={autorDiscreto.usuario}
+                  size={22}
+                />
+              )}
+              <FadeSlideView
+                animKey={statusLabel}
+                distance={4}
+                duration={160}
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: `${statusColor}18` },
+                ]}
+              >
+                <Text style={[styles.statusText, { color: statusColor }]}>
+                  {statusLabel}
+                </Text>
+              </FadeSlideView>
+            </View>
           </View>
 
           <View style={styles.cardTitleRow}>
@@ -141,34 +172,25 @@ export const FinalizadoCard: React.FC<FinalizadoCardProps> = ({
             />
           </View>
 
-          {!isSynced && (
-            <AnimatedScalePressable
-              onPress={() => onToggleStandby(vistoria)}
+          {(isError || isUploading) && (
+            <Text
               style={[
-                styles.standbyBtn,
-                vistoria.syncStandby && styles.standbyBtnActive,
+                styles.syncInfoText,
+                { color: isError ? ARPE_COLORS.danger : vTheme.primary },
               ]}
+              numberOfLines={2}
             >
-              <FadeSlideView
-                animKey={vistoria.syncStandby ? "liberar" : "standby"}
-                distance={4}
-                duration={160}
-                style={styles.standbyInner}
-              >
-                {vistoria.syncStandby ? (
-                  <PlayCircle size={15} color={vTheme.primary} />
-                ) : (
-                  <PauseCircle size={15} color={ARPE_COLORS.textSecondary} />
-                )}
-                <Text
-                  style={[
-                    styles.standbyText,
-                    vistoria.syncStandby && { color: vTheme.primary },
-                  ]}
-                >
-                  {vistoria.syncStandby ? "Liberar Envio" : "Standby"}
-                </Text>
-              </FadeSlideView>
+              {vistoria.atualizadaEm}
+            </Text>
+          )}
+
+          {!isSynced && !hideLocalControls && onRetrySync && !isUploading && (
+            <AnimatedScalePressable
+              onPress={() => onRetrySync(vistoria)}
+              style={styles.uploadBlueBtn}
+            >
+              <UploadCloud size={16} color={ARPE_COLORS.white} />
+              <Text style={styles.retryBtnText}>Enviar para nuvem</Text>
             </AnimatedScalePressable>
           )}
         </View>
@@ -201,6 +223,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   modPillText: { fontSize: 10.5, fontWeight: "800" },
+  topRightRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   statusBadge: { paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: RADII.pill },
   statusText: { fontSize: 10.5, fontWeight: "800" },
   cardTitleRow: {
@@ -227,6 +250,21 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   progressFill: { height: "100%", borderRadius: 4 },
+  syncInfoText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  actionFlex: {
+    flex: 1,
+    marginTop: 0,
+  },
   standbyBtn: {
     marginTop: SPACING.sm,
     minHeight: TOUCH_TARGET_MIN - 6,
@@ -240,4 +278,26 @@ const styles = StyleSheet.create({
   standbyInner: { flexDirection: "row", alignItems: "center", gap: 6 },
   standbyBtnActive: { backgroundColor: ARPE_COLORS.white },
   standbyText: { fontSize: 12.5, fontWeight: "800", color: ARPE_COLORS.textSecondary },
+  retryBtn: {
+    flex: 1.3,
+    minHeight: TOUCH_TARGET_MIN - 6,
+    borderRadius: RADII.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: SPACING.md,
+  },
+  retryBtnText: { fontSize: 12.5, fontWeight: "800", color: ARPE_COLORS.white },
+  uploadBlueBtn: {
+    marginTop: SPACING.sm,
+    minHeight: TOUCH_TARGET_MIN - 6,
+    borderRadius: RADII.md,
+    backgroundColor: "#2563eb",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: SPACING.md,
+  },
 });

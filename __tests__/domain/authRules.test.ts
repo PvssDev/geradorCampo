@@ -5,6 +5,7 @@ import {
   filtrarSolicitacoesPendentes,
   montarEmailSintetico,
   normalizarUsuarioLogin,
+  obterAcoesNuvemPermitidas,
   obterCorAvatar,
   obterLabelPerfil,
   podeAcessarPainelAdm,
@@ -80,5 +81,59 @@ describe("Domínio Auth — Login Sem E-mail, Senha Forte e RBAC (BDD)", () => {
     const cor2 = obterCorAvatar("  Coord.Teste ");
     expect(cor1).toBe(cor2);
     expect(AVATAR_PALETTE).toContain(cor1);
+  });
+
+  it("Dado a matriz RBAC na aba Nuvem, Quando avaliar Analista, Coordenador e ADM, Então aplica exatamente as permissões de puxar para local, apagar e redirecionar", () => {
+    expect(
+      obterAcoesNuvemPermitidas({
+        callerId: "u-ana-1",
+        callerRole: "analista",
+        autorId: "u-ana-1",
+        autorRole: "analista",
+      })
+    ).toEqual({
+      podePuxar: true,
+      podeApagarNuvem: false,
+      podeRedirecionar: false,
+    });
+
+    expect(
+      obterAcoesNuvemPermitidas({
+        callerId: "u-ana-1",
+        callerRole: "analista",
+        autorId: "u-ana-2",
+        autorRole: "analista",
+      })
+    ).toEqual({
+      podePuxar: false,
+      podeApagarNuvem: false,
+      podeRedirecionar: false,
+    });
+
+    expect(
+      obterAcoesNuvemPermitidas({
+        callerId: "u-coord-1",
+        callerRole: "coordenador",
+        autorId: "u-coord-2",
+        autorRole: "coordenador",
+      })
+    ).toEqual({
+      podePuxar: true,
+      podeApagarNuvem: false,
+      podeRedirecionar: false,
+    });
+
+    expect(
+      obterAcoesNuvemPermitidas({
+        callerId: "u-adm-1",
+        callerRole: "adm",
+        autorId: "u-ana-1",
+        autorRole: "analista",
+      })
+    ).toEqual({
+      podePuxar: true,
+      podeApagarNuvem: true,
+      podeRedirecionar: true,
+    });
   });
 });

@@ -1,9 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import {
   FlatList,
-  Platform,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -27,6 +25,7 @@ import {
 } from "../../domain/rules/domainRules";
 import { useMobileStore } from "../../application/store/useMobileStore";
 import { toast } from "../../application/store/useToastStore";
+import { mediaService } from "../../infrastructure/media/mediaService";
 import { ARPE_COLORS, getConcessionTheme } from "../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../theme/tokens";
 import {
@@ -127,23 +126,41 @@ export const GaleriaLocalScreen: React.FC = () => {
 
   const handleCompartilhar = async (fotos: readonly GaleriaFotoEntity[]) => {
     if (fotos.length === 0) return;
-    const nomes = fotos.map((f) => f.nomeArquivo).join(", ");
-    const resumo = `${fotos.length} foto(s) da Galeria ARPE: ${nomes}`;
-
-    if (Platform.OS !== "web") {
-      try {
-        await Share.share({ message: resumo });
+    try {
+      const res = await mediaService.compartilharFotos(fotos);
+      if (res.mode === "no_real_file") {
+        toast.info(
+          "Foto sem arquivo físico",
+          "Registros de exemplo não possuem arquivo JPEG real para envio."
+        );
         return;
-      } catch {
-        // fallback para feedback visual
       }
+      if (res.mode === "native_multiple") {
+        toast.success(
+          `${res.sharedCount} fotos enviadas`,
+          "Compartilhadas diretamente como imagens JPEG (sem ZIP)."
+        );
+        return;
+      }
+      if (res.mode === "native_sequential") {
+        toast.info(
+          `${res.sharedCount} fotos compartilhadas`,
+          "No Expo Go as imagens são enviadas uma a uma; no APK vão juntas."
+        );
+        return;
+      }
+      if (res.mode === "fallback_text") {
+        toast.success(
+          `Pacote pronto (${res.sharedCount} ${res.sharedCount === 1 ? "foto" : "fotos"})`,
+          "Compartilhamento nativo indisponível neste navegador."
+        );
+      }
+    } catch {
+      toast.error(
+        "Falha ao compartilhar",
+        "Não foi possível abrir o compartilhamento da imagem."
+      );
     }
-    toast.success(
-      `Pacote pronto (${fotos.length} ${fotos.length === 1 ? "foto" : "fotos"})`,
-      sessoesFiltro.length > 0
-        ? `Compartilhando apenas fotos das sessões filtradas (${sessoesFiltro.length}).`
-        : "Fotos selecionadas prontas para compartilhamento."
-    );
   };
 
   const handleConfirmarExclusao = () => {

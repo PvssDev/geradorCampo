@@ -1,12 +1,15 @@
 import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import {
   Database,
+  Images,
   Lock,
   ShieldCheck,
   Smartphone,
   X,
 } from "lucide-react-native";
+import { useMobileStore } from "../../../application/store/useMobileStore";
+import { toast } from "../../../application/store/useToastStore";
 import { ARPE_COLORS } from "../../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../../theme/tokens";
 import {
@@ -30,7 +33,7 @@ const INFO_ITEMS = [
   {
     key: "sandbox",
     title: "Armazenamento Local Privado",
-    sub: "Fotos comprimidas (~200 KB) isoladas na pasta privada do app, fora da galeria pública",
+    sub: "Fotos comprimidas (~200 KB) sempre ficam salvas na pasta privada do app",
     icon: Database,
     color: ARPE_COLORS.navy,
   },
@@ -54,6 +57,23 @@ export const ConfiguracoesModal: React.FC<ConfiguracoesModalProps> = ({
   visible,
   onClose,
 }) => {
+  const salvarCopiaGaleriaCelular = useMobileStore(
+    (s) => s.salvarCopiaGaleriaCelular
+  );
+  const setSalvarCopiaGaleriaCelular = useMobileStore(
+    (s) => s.setSalvarCopiaGaleriaCelular
+  );
+
+  const handleToggleGaleria = (value: boolean) => {
+    setSalvarCopiaGaleriaCelular(value);
+    toast.info(
+      value ? "Cópia na galeria ativada" : "Cópia na galeria desativada",
+      value
+        ? "Novas fotos serão salvas no app e no álbum ARPE Fiscalização do celular."
+        : "Novas fotos ficarão salvas somente na pasta privada do app."
+    );
+  };
+
   return (
     <AnimatedModalBox
       visible={visible}
@@ -84,6 +104,25 @@ export const ConfiguracoesModal: React.FC<ConfiguracoesModalProps> = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.toggleCard}>
+          <View style={styles.iconBox}>
+            <Images size={18} color={ARPE_COLORS.navy} />
+          </View>
+          <View style={styles.textWrap}>
+            <Text style={styles.cardTitle}>Salvar fotos na galeria do celular</Text>
+            <Text style={styles.cardSub}>
+              Quando ativo, toda foto capturada é salva no app e copiada para o álbum ARPE Fiscalização do aparelho.
+            </Text>
+          </View>
+          <Switch
+            value={salvarCopiaGaleriaCelular}
+            onValueChange={handleToggleGaleria}
+            trackColor={{ false: ARPE_COLORS.borderStrong, true: "#2563eb" }}
+            thumbColor={ARPE_COLORS.white}
+            accessibilityLabel="Salvar fotos na galeria do celular"
+          />
+        </View>
+
         {INFO_ITEMS.map((item) => {
           const Icon = item.icon;
           return (
@@ -147,6 +186,16 @@ const styles = StyleSheet.create({
     borderRadius: RADII.md,
     borderWidth: 1,
     borderColor: ARPE_COLORS.border,
+    padding: SPACING.md,
+  },
+  toggleCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+    backgroundColor: "#eff6ff",
+    borderRadius: RADII.md,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
     padding: SPACING.md,
   },
   iconBox: {

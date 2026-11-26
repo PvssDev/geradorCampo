@@ -2,11 +2,11 @@
   "expo": {
     "name": "ARPE Fiscalização",
     "slug": "arpe-relatorios-mobile",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "arpe-fiscalizacao",
-    "icon": "./assets/logo/logo_icone.png",
+    "icon": "./assets/logo/app_icon.png",
     "splash": {
       "image": "./assets/logo/logo_inteira.png",
       "resizeMode": "contain",
@@ -15,12 +15,16 @@
     "android": {
       "package": "br.gov.pe.arpe.fiscalizacao",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo/logo_icone.png",
+        "foregroundImage": "./assets/logo/app_icon_foreground.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.ACCESS_NETWORK_STATE"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -33,6 +37,19 @@
         "expo-camera",
         {
           "cameraPermission": "Permita o acesso à câmera para registrar evidências fotográficas das vistorias da ARPE."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permita o acesso à localização para estampar coordenadas GPS e município nas fotos de fiscalização da ARPE."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Permita o acesso à galeria para salvar cópia das fotos de vistoria quando ativado nas configurações.",
+          "savePhotosPermission": "Permita salvar cópia das fotos de vistoria na galeria do aparelho quando ativado nas configurações."
         }
       ],
       "expo-asset"

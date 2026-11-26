@@ -16,6 +16,7 @@ import {
 } from "../../../domain/config/concessionConfig";
 import {
   CategoriaRelatorio,
+  FotoMidiaEntity,
   OcorrenciaEntity,
   SituacaoNC,
   TipoAchado,
@@ -26,6 +27,7 @@ import {
   obterSiglasPorConcessao,
   sugerirCodificacaoPorConcessao,
 } from "../../../domain/rules/domainRules";
+import { resolverUriPorNomeArquivo } from "../../../domain/rules/watermarkRules";
 import { ARPE_COLORS } from "../../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../../theme/tokens";
 import { toast } from "../../../application/store/useToastStore";
@@ -55,6 +57,7 @@ interface ClassificarOcorrenciaModalProps {
   localSessao: string;
   proximoSequencial: number;
   photoDraft: SimulatedPhotoDraft | null;
+  fotosVistoria?: readonly FotoMidiaEntity[];
   editingOcorrencia?: OcorrenciaEntity | null;
   editingTarget?: FotoOcorrenciaAlvo;
   accentColor: string;
@@ -78,6 +81,7 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
   localSessao,
   proximoSequencial,
   photoDraft,
+  fotosVistoria = [],
   editingOcorrencia = null,
   editingTarget = "principal",
   accentColor,
@@ -96,6 +100,9 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
     : isEditingRelated
       ? editingOcorrencia?.relacionamento?.fotoRelacionadaNome
       : editingOcorrencia?.fotoAtualNome;
+  const fotoBannerUri =
+    photoDraft?.localUri ??
+    resolverUriPorNomeArquivo(fotosVistoria, fotoBannerNome);
   const anoAtual = new Date().getFullYear();
   const optionsSiglas = obterSiglasPorConcessao(tipoRelatorio);
 
@@ -271,6 +278,7 @@ export const ClassificarOcorrenciaModal: React.FC<ClassificarOcorrenciaModalProp
         <FadeSlideView delay={30} distance={6} style={styles.photoConfirmedBanner}>
           <SimulatedPhotoThumb
             nomeArquivo={fotoBannerNome}
+            localUri={fotoBannerUri}
             accentColor={accentColor}
             accentSoft={ARPE_COLORS.surfaceMuted}
             size={48}

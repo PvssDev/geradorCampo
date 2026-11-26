@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, StyleSheet, Text, View } from "react-native";
 import { Camera } from "lucide-react-native";
 import { GaleriaFotoEntity } from "../../../domain/entities/types";
+import { ehUriFotoReal } from "../../../domain/rules/watermarkRules";
 import { ARPE_COLORS, getGaleriaFotoTheme } from "../../theme/colors";
 import { RADII, SPACING } from "../../theme/tokens";
 import {
@@ -33,6 +34,7 @@ export const GaleriaPhotoTile: React.FC<GaleriaPhotoTileProps> = ({
   onLongPress,
 }) => {
   const isOrphan = foto.vistoriaId === null;
+  const temFotoReal = ehUriFotoReal(foto.localUri);
   const itemTheme = getGaleriaFotoTheme(foto);
   const shortName = foto.nomeArquivo.replace(/\.[^.]+$/, "").slice(-9);
   const tagLabel = isOrphan
@@ -95,6 +97,43 @@ export const GaleriaPhotoTile: React.FC<GaleriaPhotoTileProps> = ({
               },
             ]}
           >
+            {temFotoReal ? (
+              <>
+                <Image
+                  source={{ uri: foto.localUri }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="cover"
+                />
+                <View
+                  style={[
+                    styles.tileTagFloating,
+                    { backgroundColor: itemTheme.primary },
+                  ]}
+                >
+                  <Text style={styles.tileTagText} numberOfLines={1}>
+                    {tagLabel}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <Camera size={22} color={itemTheme.primary} />
+                <Text
+                  style={[styles.tileName, { color: itemTheme.primary }]}
+                  numberOfLines={1}
+                >
+                  {shortName}
+                </Text>
+                <View
+                  style={[styles.tileTag, { backgroundColor: itemTheme.primary }]}
+                >
+                  <Text style={styles.tileTagText} numberOfLines={1}>
+                    {tagLabel}
+                  </Text>
+                </View>
+              </>
+            )}
+
             <Animated.View
               style={[styles.tileTopBar, { backgroundColor: animatedColor }]}
             />
@@ -116,21 +155,6 @@ export const GaleriaPhotoTile: React.FC<GaleriaPhotoTileProps> = ({
                 size={12}
               />
             </Animated.View>
-
-            <Camera size={22} color={itemTheme.primary} />
-            <Text
-              style={[styles.tileName, { color: itemTheme.primary }]}
-              numberOfLines={1}
-            >
-              {shortName}
-            </Text>
-            <View
-              style={[styles.tileTag, { backgroundColor: itemTheme.primary }]}
-            >
-              <Text style={styles.tileTagText} numberOfLines={1}>
-                {tagLabel}
-              </Text>
-            </View>
           </Animated.View>
         </AnimatedScalePressable>
       </Animated.View>
@@ -167,5 +191,13 @@ const styles = StyleSheet.create({
   },
   tileName: { fontSize: 10, fontWeight: "800" },
   tileTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: RADII.pill },
+  tileTagFloating: {
+    position: "absolute",
+    left: 6,
+    top: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADII.pill,
+  },
   tileTagText: { fontSize: 8.5, fontWeight: "800", color: ARPE_COLORS.white },
 });

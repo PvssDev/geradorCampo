@@ -82,6 +82,9 @@ export interface OcorrenciaEntity {
 
 export interface VistoriaSessionEntity {
   readonly id: string;
+  readonly autorId?: string;
+  readonly autorUsuario?: string;
+  readonly autorNome?: string;
   readonly tipoRelatorio: TipoRelatorio;
   readonly categoriaRelatorio: CategoriaRelatorio;
   readonly lifecycleStatus: SessionLifecycleStatus;

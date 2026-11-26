@@ -12,7 +12,6 @@ import {
   aplicarToquePeriodo,
   calcularCodificacaoCra,
   calcularEstatisticasMonitoramento,
-  calcularProgressoSync,
   construirRelacionamentoValidado,
   contarFiltrosAtivosVistorias,
   contarFiltrosModal,
@@ -23,7 +22,6 @@ import {
   FILTRO_VISTORIAS_INICIAL,
   filtrarFotosGaleriaPorSessao,
   filtrarVistoriasEmAberto,
-  filtrarVistoriasFinalizadas,
   formatarPeriodoIsoParaBr,
   obterSiglasPorConcessao,
   podeAutoSincronizar,
@@ -473,7 +471,7 @@ describe("Domínio Mobile — Regras Puras dos 6 Estados e Fluxo Limpo (BDD)", (
       (f) => f.nomeArquivo === fotoNova.nomeArquivo
     );
     expect(fotoNaGaleria).toBeDefined();
-    expect(fotoNaGaleria?.localUri).toContain("sandbox://galeria/");
+    expect(fotoNaGaleria?.localUri).toBe(fotoNova.localUri);
 
     // Apaga a vistoria na aba Vistorias — fotos DEVEM sobreviver na Galeria como "sem vistoria"
     aposCaptura.excluirVistorias([vistoriaAlvo.id]);
@@ -531,10 +529,16 @@ describe("Domínio Mobile — Regras Puras dos 6 Estados e Fluxo Limpo (BDD)", (
       ).toBe(false);
     }
 
-    // Verifica helper puro criarFotoGaleriaDeVistoria
-    const criada = criarFotoGaleriaDeVistoria(vistoriaAlvo, fotoNova);
+    // Verifica helper puro criarFotoGaleriaDeVistoria preservando URI real do sandbox
+    const criada = criarFotoGaleriaDeVistoria(vistoriaAlvo, {
+      ...fotoNova,
+      localUri: "file:///data/user/0/br.gov.pe.arpe/files/arpe_galeria/FOTO_001.jpg",
+    });
     expect(criada.tipoRelatorio).toBe(vistoriaAlvo.tipoRelatorio);
     expect(criada.categoriaRelatorio).toBe(vistoriaAlvo.categoriaRelatorio);
+    expect(criada.localUri).toBe(
+      "file:///data/user/0/br.gov.pe.arpe/files/arpe_galeria/FOTO_001.jpg"
+    );
   });
 
   it("Dado ocorrência com foto relacionada, Quando editar fundamento/determinação ou remover uma foto, Então compartilha entre ambas e promove/exclui corretamente", () => {
@@ -604,55 +608,56 @@ describe("Domínio Mobile — Regras Puras dos 6 Estados e Fluxo Limpo (BDD)", (
     }
   });
 
-  it("Dado sessões finalizadas com Standby e modo Online, Quando sincronizar ou reabrir, Então respeita Standby e devolve reaberta para em_aberto", () => {
+  it("Dado sessões finalizadas no Offline e Online, Quando alternar modo ou reabrir, Então travadas no offline aguardam botão manual e reaberta exige envio manual", async () => {
     const s = useMobileStore.getState();
-    s.setNetworkMode("offline_manual");
+    s.setNetworkMode("online");
 
-    const idNormal = s.criarVistoria({
+    const idDireta = s.criarVistoria({
       idFiscalizacao: "FISC-CRA-TEST-01",
       local: "Rota do Atlântico",
       cidade: "Ipojuca",
       equipe: "Equipe A",
       coordenador: "Coord",
     });
-    const idStandby = s.criarVistoria({
+    useMobileStore.getState().finalizarVistoria(idDireta, "FISC-CRA-TEST-01");
+    expect(
+      useMobileStore.getState().vistorias.find((v) => v.id === idDireta)?.syncStatus
+    ).toBe("synced");
+
+    // No Offline, ao finalizar fica travada para envio manual (botão azul)
+    useMobileStore.getState().setNetworkMode("offline_manual");
+    const idOffline = useMobileStore.getState().criarVistoria({
       idFiscalizacao: "FISC-SOC-TEST-02",
       local: "Terminal Rodoviário de Caruaru",
       cidade: "Caruaru",
       equipe: "Equipe B",
       coordenador: "Coord",
     });
+    useMobileStore.getState().finalizarVistoria(idOffline, "FISC-SOC-TEST-02");
 
-    const st1 = useMobileStore.getState();
-    st1.finalizarVistoria(idNormal, "FISC-CRA-TEST-01");
-    st1.finalizarVistoria(idStandby, "FISC-SOC-TEST-02");
-    st1.toggleStandbyVistoria(idStandby);
-
-    const finalizadasAntes = filtrarVistoriasFinalizadas(
-      useMobileStore.getState().vistorias
-    );
-    expect(finalizadasAntes.some((v) => v.id === idNormal)).toBe(true);
-    expect(finalizadasAntes.some((v) => v.id === idStandby)).toBe(true);
-
-    // Ativa Online: apenas a sessão normal deve subir; a em Standby permanece pendente
+    // Ao mudar para Online, a que foi finalizada no offline permanece pendente até clicar no botão azul
     useMobileStore.getState().setNetworkMode("online");
-    const aposSync = useMobileStore.getState().vistorias;
-    const vNormal = aposSync.find((v) => v.id === idNormal);
-    const vStandby = aposSync.find((v) => v.id === idStandby);
-    expect(vNormal?.syncStatus).toBe("synced");
-    expect(vStandby?.syncStatus).toBe("pending");
-    expect(vStandby?.syncStandby).toBe(true);
-    if (vNormal) {
-      expect(calcularProgressoSync(vNormal).percentual).toBe(100);
-    }
+    const vOffline = useMobileStore
+      .getState()
+      .vistorias.find((v) => v.id === idOffline);
+    expect(vOffline?.syncStatus).toBe("pending");
+    expect(vOffline?.syncStandby).toBe(true);
 
-    // Reabrir Finalizado devolve para em_aberto e limpa standby
-    useMobileStore.getState().reabrirVistoria(idStandby);
+    // Ao clicar no botão azul (sincronizarVistoriaAgora) mesmo estando offline, ativa online e sobe apenas aquela
+    useMobileStore.getState().setNetworkMode("offline_manual");
+    useMobileStore.getState().sincronizarVistoriaAgora(idOffline);
+    expect(useMobileStore.getState().networkMode).toBe("online");
+    expect(
+      useMobileStore.getState().vistorias.find((v) => v.id === idOffline)?.syncStatus
+    ).toBe("synced");
+
+    // Reabrir Finalizado devolve para em_aberto e mantém syncStandby = true (para exigir botão azul ao finalizar)
+    await useMobileStore.getState().reabrirVistoria(idOffline);
     const reaberta = useMobileStore
       .getState()
-      .vistorias.find((v) => v.id === idStandby);
+      .vistorias.find((v) => v.id === idOffline);
     expect(reaberta?.lifecycleStatus).toBe("em_aberto");
-    expect(reaberta?.syncStandby).toBe(false);
+    expect(reaberta?.syncStandby).toBe(true);
 
     // Resolução automática de 3 estados (Online/Offline manual + Desconectado automático)
     expect(resolverModoRede(true, true)).toBe("offline_manual");

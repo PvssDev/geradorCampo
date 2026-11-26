@@ -109,3 +109,57 @@ export function validarDecisaoAcesso(
   }
   return { ok: true };
 }
+
+export interface AcoesNuvemPermitidas {
+  readonly podePuxar: boolean;
+  readonly podeApagarNuvem: boolean;
+  readonly podeRedirecionar: boolean;
+}
+
+/**
+ * Matriz RBAC oficial da aba Finalizados > Nuvem:
+ * - Analista: apenas "Puxar para local" quando for o próprio autor.
+ * - Coordenador: "Puxar para local" a própria ou de analistas / outros coordenadores.
+ * - ADM: "Puxar para local", "Apagar da nuvem" e "Redirecionar" qualquer vistoria.
+ */
+export function obterAcoesNuvemPermitidas(params: {
+  readonly callerId?: string | null;
+  readonly callerRole?: UserRole | null;
+  readonly autorId?: string | null;
+  readonly autorRole?: UserRole | null;
+}): AcoesNuvemPermitidas {
+  const { callerId, callerRole, autorId, autorRole } = params;
+  if (!callerId || !callerRole) {
+    return {
+      podePuxar: false,
+      podeApagarNuvem: false,
+      podeRedirecionar: false,
+    };
+  }
+
+  const ehAutor = callerId === autorId;
+
+  if (callerRole === "adm") {
+    return {
+      podePuxar: true,
+      podeApagarNuvem: true,
+      podeRedirecionar: true,
+    };
+  }
+
+  if (callerRole === "coordenador") {
+    const alvoPermitido =
+      autorRole === "analista" || autorRole === "coordenador" || !autorRole;
+    return {
+      podePuxar: ehAutor || alvoPermitido,
+      podeApagarNuvem: false,
+      podeRedirecionar: false,
+    };
+  }
+
+  return {
+    podePuxar: ehAutor,
+    podeApagarNuvem: false,
+    podeRedirecionar: false,
+  };
+}

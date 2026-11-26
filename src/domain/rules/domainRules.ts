@@ -456,7 +456,7 @@ export function criarFotoGaleriaDeVistoria(
     categoriaRelatorio: vistoria.categoriaRelatorio,
     local: vistoria.fiscalizacao.local,
     nomeArquivo: foto.nomeArquivo,
-    localUri: `sandbox://galeria/${vistoria.id}/${foto.nomeArquivo}`,
+    localUri: foto.localUri || `sandbox://galeria/${vistoria.id}/${foto.nomeArquivo}`,
     tamanhoKb: foto.tamanhoKb,
     capturadaEm: foto.capturadaEm,
     ocorrenciaNumero: foto.ocorrenciaNumero,

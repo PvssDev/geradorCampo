@@ -22,10 +22,12 @@ import {
   FotoOcorrenciaAlvo,
   podeRelacionarOcorrencia,
 } from "../../domain/rules/domainRules";
+import { resolverUriPorNomeArquivo } from "../../domain/rules/watermarkRules";
 import { useMobileStore } from "../../application/store/useMobileStore";
 import { toast } from "../../application/store/useToastStore";
 import { ARPE_COLORS, getConcessionTheme } from "../theme/colors";
 import { RADII, SPACING, TOUCH_TARGET_MIN } from "../theme/tokens";
+import { CameraQuadradaModal } from "../components/camera/CameraQuadradaModal";
 import { StepModalidade } from "../components/inicio/StepModalidade";
 import { StepDadosIniciais } from "../components/inicio/StepDadosIniciais";
 import {
@@ -58,13 +60,14 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
     tipoRelatorio,
     categoriaRelatorio,
     vistorias,
+    galeriaFotos,
     activeVistoriaId,
     setWizardStep,
     setModalidade,
     criarVistoria,
     atualizarDadosVistoria,
     iniciarNovoRelatorioWizard,
-    simularCapturaFoto,
+    registrarFotoCapturada,
     adicionarOcorrencia,
     atualizarOcorrencia,
     atualizarRelacionamentoOcorrencia,
@@ -89,6 +92,7 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
   );
 
   const [photoDraft, setPhotoDraft] = useState<SimulatedPhotoDraft | null>(null);
+  const [cameraVisible, setCameraVisible] = useState(false);
   const [escolherOrigemVisible, setEscolherOrigemVisible] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [relacionarFluxoVisible, setRelacionarFluxoVisible] = useState(false);
@@ -127,18 +131,9 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
     [vistoriaAtiva]
   );
 
-  const gerarDraftFoto = () => {
-    const seq = (vistoriaAtiva?.fotos.length ?? 0) + 1;
-    const horario = new Date().toLocaleTimeString("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    setPhotoDraft({
-      nomeArquivo: `FOTO_${String(seq).padStart(3, "0")}.jpg`,
-      horario,
-      tamanhoKb: 182 + (seq % 5) * 11,
-    });
-    setPreviewVisible(true);
+  const abrirCameraQuadrada = () => {
+    setPreviewVisible(false);
+    setCameraVisible(true);
   };
 
   const handleConfirmarFoto = () => {
@@ -163,17 +158,30 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
       return;
     }
     const proximoNumero = vistoriaAtiva.ocorrencias.length + 1;
-    const fotoCriada = simularCapturaFoto(vistoriaAtiva.id, proximoNumero);
+    const seq = vistoriaAtiva.fotos.length + 1;
+    const nomeFallback = `FOTO_${String(seq).padStart(3, "0")}.jpg`;
+    const fotoCriada = registrarFotoCapturada(vistoriaAtiva.id, {
+      nomeArquivo: photoDraft?.nomeArquivo || nomeFallback,
+      localUri: photoDraft?.localUri,
+      tamanhoKb: photoDraft?.tamanhoKb ?? 195,
+      horario:
+        photoDraft?.horario ||
+        new Date().toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      ocorrenciaNumero: proximoNumero,
+    });
     adicionarOcorrencia(vistoriaAtiva.id, {
       ...novaOc,
-      fotoAtualNome: photoDraft?.nomeArquivo || fotoCriada.nomeArquivo,
+      fotoAtualNome: fotoCriada.nomeArquivo,
     });
     vincularFotoUltimaOcorrencia(vistoriaAtiva.id, fotoCriada.id, proximoNumero);
     setClassificarVisible(false);
     setPhotoDraft(null);
     toast.success(
       `Ocorrência #${String(proximoNumero).padStart(2, "0")} salva`,
-      `${novaOc.tipoAchado} vinculada à foto ${photoDraft?.nomeArquivo || fotoCriada.nomeArquivo}`
+      `${novaOc.tipoAchado} vinculada à foto ${fotoCriada.nomeArquivo}`
     );
   };
 
@@ -342,7 +350,7 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
         {/* Ações de foto: Tirar foto comprobatória + Escolher foto já tirada */}
         <FadeSlideView delay={35} distance={8} style={styles.photoActionsStack}>
           <AnimatedScalePressable
-            onPress={gerarDraftFoto}
+            onPress={abrirCameraQuadrada}
             style={[
               styles.captureCard,
               {
@@ -359,7 +367,7 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
                 Tirar foto comprobatória
               </Text>
               <Text style={styles.captureSubtitle}>
-                Capturar agora (simulado), conferir e registrar NC/PA ou relacionar
+                Câmera 1:1 com data/hora, GPS e local gravados no canto inferior direito
               </Text>
             </View>
           </AnimatedScalePressable>
@@ -401,6 +409,10 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
                   >
                     <SimulatedPhotoThumb
                       nomeArquivo={oc.fotoAtualNome}
+                      localUri={resolverUriPorNomeArquivo(
+                        vistoriaAtiva.fotos,
+                        oc.fotoAtualNome
+                      )}
                       accentColor={theme.primary}
                       accentSoft={theme.primarySoft}
                       size={56}
@@ -498,9 +510,23 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
 
       {vistoriaAtiva && (
         <>
+          <CameraQuadradaModal
+            visible={cameraVisible}
+            proximoSequencialFoto={vistoriaAtiva.fotos.length + 1}
+            cidadeVistoria={vistoriaAtiva.fiscalizacao.cidade}
+            localVistoria={vistoriaAtiva.fiscalizacao.local}
+            accentColor={theme.primary}
+            onClose={() => setCameraVisible(false)}
+            onPhotoCaptured={(draft) => {
+              setCameraVisible(false);
+              setPhotoDraft(draft);
+              setPreviewVisible(true);
+            }}
+          />
+
           <EscolherFotoOrigemModal
             visible={escolherOrigemVisible}
-            fotosGaleriaApp={todasFotosApp}
+            fotosGaleriaApp={galeriaFotos.length > 0 ? galeriaFotos : todasFotosApp}
             accentColor={theme.primary}
             accentSoft={theme.primarySoft}
             onClose={() => setEscolherOrigemVisible(false)}
@@ -517,7 +543,7 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
             photoDraft={photoDraft}
             accentColor={theme.primary}
             temOcorrenciaElegivel={temOcorrenciaElegivel}
-            onRefazer={gerarDraftFoto}
+            onRefazer={abrirCameraQuadrada}
             onRelacionar={handleAbrirRelacionarDaFoto}
             onConfirmar={handleConfirmarFoto}
             onClose={() => setPreviewVisible(false)}
@@ -527,6 +553,7 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
             visible={relacionarFluxoVisible}
             photoDraft={photoDraft}
             ocorrencias={vistoriaAtiva.ocorrencias}
+            fotosVistoria={vistoriaAtiva.fotos}
             tipoRelatorio={vistoriaAtiva.tipoRelatorio}
             accentColor={theme.primary}
             accentSoft={theme.primarySoft}
@@ -546,6 +573,7 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
             localSessao={vistoriaAtiva.fiscalizacao.local}
             proximoSequencial={vistoriaAtiva.ocorrencias.length + 1}
             photoDraft={editingOcorrenciaNum !== null ? null : photoDraft}
+            fotosVistoria={vistoriaAtiva.fotos}
             editingOcorrencia={ocorrenciaEmEdicao}
             editingTarget={editingTarget}
             accentColor={theme.primary}
@@ -573,6 +601,7 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
           <OcorrenciaDetalheRelacaoModal
             visible={ocorrenciaSelecionada !== null}
             ocorrencia={ocorrenciaSelecionada}
+            fotosVistoria={vistoriaAtiva.fotos}
             tipoRelatorio={vistoriaAtiva.tipoRelatorio}
             accentColor={theme.primary}
             accentSoft={theme.primarySoft}
@@ -614,6 +643,9 @@ export const InicioWizardScreen: React.FC<InicioWizardScreenProps> = ({
           <FinalizarRelatorioModal
             visible={finalizarVisible}
             sugestaoId={vistoriaAtiva.fiscalizacao.idFiscalizacao}
+            nomesExistentes={vistorias
+              .filter((v) => v.id !== vistoriaAtiva.id)
+              .map((v) => v.fiscalizacao.idFiscalizacao)}
             accentColor={theme.primary}
             onCancel={() => setFinalizarVisible(false)}
             onConfirmarFinalizacao={(nomeId) => {

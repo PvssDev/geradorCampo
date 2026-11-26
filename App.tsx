@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuthStore } from "./src/application/store/useAuthStore";
+import { useMobileStore } from "./src/application/store/useMobileStore";
 import { RootNavigator } from "./src/presentation/navigation/RootNavigator";
 import { LoginScreen } from "./src/presentation/screens/LoginScreen";
 import { ArpeSplashOverlay } from "./src/presentation/components/common/ArpeSplashOverlay";
@@ -11,10 +12,12 @@ export default function App() {
   const hydrated = useAuthStore((s) => s.hydrated);
   const session = useAuthStore((s) => s.session);
   const hidratarSessao = useAuthStore((s) => s.hidratarSessao);
+  const hidratarBancoLocal = useMobileStore((s) => s.hidratarBancoLocal);
 
   useEffect(() => {
     void hidratarSessao();
-  }, [hidratarSessao]);
+    void hidratarBancoLocal();
+  }, [hidratarSessao, hidratarBancoLocal]);
 
   return (
     <SafeAreaProvider>

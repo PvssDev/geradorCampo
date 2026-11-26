@@ -13,6 +13,7 @@ import {
 interface FinalizarRelatorioModalProps {
   visible: boolean;
   sugestaoId: string;
+  nomesExistentes?: readonly string[];
   accentColor: string;
   onCancel: () => void;
   onConfirmarFinalizacao: (nomeIdRelatorio: string) => void;
@@ -21,6 +22,7 @@ interface FinalizarRelatorioModalProps {
 export const FinalizarRelatorioModal: React.FC<FinalizarRelatorioModalProps> = ({
   visible,
   sugestaoId,
+  nomesExistentes = [],
   accentColor,
   onCancel,
   onConfirmarFinalizacao,
@@ -38,10 +40,20 @@ export const FinalizarRelatorioModal: React.FC<FinalizarRelatorioModalProps> = (
   }, [visible, sugestaoId]);
 
   const handleAvancarConfirmacao = () => {
-    if (!nomeId.trim()) {
+    const limpo = nomeId.trim();
+    if (!limpo) {
       const msg = "Informe o nome (ID) do relatório antes de finalizar.";
       setErro(msg);
       toast.error("ID obrigatório", msg);
+      return;
+    }
+    const duplicado = nomesExistentes.some(
+      (item) => item.trim().toLowerCase() === limpo.toLowerCase()
+    );
+    if (duplicado) {
+      const msg = "Já existe outra vistoria local com este mesmo nome. Escolha um ID diferente.";
+      setErro(msg);
+      toast.error("Nome duplicado", msg);
       return;
     }
     setErro("");
